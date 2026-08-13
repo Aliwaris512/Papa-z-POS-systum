@@ -1,0 +1,156 @@
+{
+  "restaurant": {
+    "name": "Papa'Zzz Shawarma & Pizza",
+    "tagline": "Live Pizza Kitchen",
+    "timing": "04:00 PM to 03:00 AM",
+    "phone": ["0326-1231238", "0318-4533774"],
+    "email": "papazzzshawarma@gmail.com",
+    "address": "6/B, Ibn-e-Saeed Road, Near Cakes & Bakes, Canal Bank Scheme Lahore",
+    "delivery": {
+      "radius_2km": "Minimum Order Rs.800",
+      "above_3km": "Rs.2000"
+    }
+  },
+  "categories": [
+    {
+      "name": "Burger's",
+      "items": [
+        { "name": "Grill Cheese Burger", "price": 600 },
+        { "name": "Zinger Burger", "price": 380 },
+        { "name": "Tower Burger", "price": 550 },
+        { "name": "Chicken Boti Burger", "price": 380 },
+        { "name": "Chicken Fillet Burger", "price": 450 },
+        { "name": "Zinger Cheese Burger", "price": 440 },
+        { "name": "Lavy Burger", "price": 550 },
+        { "name": "Patty Burger", "price": 250 }
+      ]
+    },
+    {
+      "name": "Shawarma",
+      "items": [
+        { "name": "Papazzz Special Shawarma", "price": 420 },
+        { "name": "Chicken Shawarma", "price": 360 },
+        { "name": "Chicken Cheese Shawarma", "price": 420 },
+        { "name": "Zinger Shawarma", "price": 380 }
+      ]
+    },
+    {
+      "name": "Wrap",
+      "items": [
+        { "name": "Special Wrap", "price": 700 },
+        { "name": "Arabic Wrap", "price": 600 },
+        { "name": "Zinger Wrap", "price": 600 },
+        { "name": "Grill Wrap", "price": 600 }
+      ]
+    },
+    {
+      "name": "Rolls",
+      "items": [
+        { "name": "Zinger Paratha Roll", "price": 450 },
+        { "name": "Chicken Paratha Roll", "price": 420 },
+        { "name": "Kabab Paratha Roll", "price": 400 },
+        { "name": "Cheese Roll 2 Pcs", "price": 800 }
+      ]
+    },
+    {
+      "name": "Platter",
+      "items": [
+        { "name": "Half Platter Shawarma", "price": 750 },
+        { "name": "Full Platter Shawarma", "price": 900 }
+      ]
+    },
+    {
+      "name": "Chef's Special",
+      "items": [
+        { "name": "Pizza Sandwich", "price": 700 },
+        { "name": "Pizza Burger", "price": 800 },
+        { "name": "Creamy Paista H", "price": 400 },
+        { "name": "Creamy Paista F", "price": 850 },
+        { "name": "Chicken Pocket Donut", "price": 500 },
+        { "name": "Loaded Fries S", "price": 400 },
+        { "name": "Loaded Fries L", "price": 750 },
+        { "name": "Mayo Garlic Fries", "price": 400 }
+      ]
+    },
+    {
+      "name": "Sandwich",
+      "items": [
+        { "name": "Special Sandwich", "price": 600 },
+        { "name": "Grill Sandwich", "price": 600 },
+        { "name": "Chicken Cheese Sandwich", "price": 600 },
+        { "name": "Club Sandwich", "price": 420 }
+      ]
+    },
+    {
+      "name": "Appetizers",
+      "items": [
+        { "name": "Hot Wings 5pcs", "price": 400 },
+        { "name": "Hot Wings 10pcs", "price": 750 },
+        { "name": "Hot Shots 06pcs", "price": 350 },
+        { "name": "Hot Shots 12pcs", "price": 650 },
+        { "name": "Fries Half", "price": 250 },
+        { "name": "Family Fries", "price": 400 }
+      ]
+    },
+    {
+      "name": "Beverages",
+      "items": [
+        { "name": "Mineral Water (Small)", "price": 60 },
+        { "name": "Mineral Water (Large)", "price": 120 },
+        { "name": "Soft Drink (Small)", "price": 120 },
+        { "name": "Soft Drink (Large)", "price": 220 }
+      ]
+    },
+    {
+      "name": "Signature Pizzas",
+      "note": "Prices vary by size: S = Small, M = Medium, L = Large, F = Family",
+      "items": [
+        { "name": "Papazzz Special Pizza", "sizes": { "S": 650, "M": 1300, "L": 1800, "F": 2300 } },
+        { "name": "Chicken Fajita Pizza", "sizes": { "S": 600, "M": 1100, "L": 1500, "F": 2000 } },
+        { "name": "Super Special Papazzz", "sizes": { "M": 1650, "L": 2250, "F": 2900 } },
+        { "name": "Chicken Tikka Pizza", "sizes": { "S": 600, "M": 1100, "L": 1500, "F": 2000 } },
+        { "name": "Crown Crust", "sizes": { "M": 1600, "L": 2100, "F": 2700 } },
+        { "name": "Hot & Spicy Pizza", "sizes": { "S": 600, "M": 1100, "L": 1500, "F": 2000 } },
+        { "name": "Malai Boti Pizza", "sizes": { "S": 650, "M": 1200, "L": 1750, "F": 2200 } },
+        { "name": "Chicken Supreme Pizza", "sizes": { "S": 600, "M": 1100, "L": 1500, "F": 2000 } },
+        { "name": "Behari Kabab Pizza", "sizes": { "S": 650, "M": 1300, "L": 1800, "F": 2300 } },
+        { "name": "Kabab Stuffed Pizza", "sizes": { "S": 700, "M": 1450, "L": 1900, "F": 2500 } },
+        { "name": "Cheese Stuffed Pizza", "sizes": { "S": 700, "M": 1450, "L": 1900, "F": 2500 } },
+        { "name": "Cheese Kabab Stuffed", "sizes": { "S": 750, "M": 1500, "L": 2000, "F": 2600 } },
+        { "name": "4 in 1 Pizza", "sizes": { "M": 1600, "L": 2000, "F": 2700 } },
+        { "name": "Cheese Lover & Vegetable Pizza", "sizes": { "S": 550, "M": 1100, "L": 1400 } }
+      ],
+      "addons": [
+        { "name": "Cheese Topping", "prices": { "S": 150, "M": 200, "L": 250, "F": 300 } },
+        { "name": "Boost Your Taste (Chicken Topping)", "prices": { "S": 150, "M": 200, "L": 250, "F": 300 } },
+        { "name": "Add Extra Sauce", "price": 150 }
+      ]
+    },
+    {
+      "name": "Double Ka Maza - Pizza Bundles",
+      "items": [
+        { "name": "2 Small Pizza (8\")", "price": 1140 },
+        { "name": "2 Medium Pizza (11\")", "price": 2050 },
+        { "name": "2 Large Pizza (14\")", "price": 2800 },
+        { "name": "2 Family Pizza (16\")", "price": 3700 }
+      ]
+    },
+    {
+      "name": "Deals",
+      "items": [
+        { "name": "Deal 1", "price": 520, "description": "1 Zinger Burger, Fries + 345ml Drink" },
+        { "name": "Deal 2", "price": 999, "description": "2 Zinger Burger, Fries + 0.5 Ltr Drink" },
+        { "name": "Deal 3", "price": 1480, "description": "Pizza Sandwich, Small Pasta, Small Loaded Fries, 0.5 Ltr Drink" },
+        { "name": "Deal 4", "price": 1020, "description": "Arabic Wrap, Hot Wings 5pcs, 0.5 Ltr Drink" },
+        { "name": "Deal 5", "price": 2250, "description": "3 Grill Burger, Hot Wings 5pcs, 1.5 Ltr Drink" },
+        { "name": "Deal 6", "price": 2200, "description": "6 Chicken Shawarma, 1.5 Ltr Drink" },
+        { "name": "Deal 7", "price": 1250, "description": "Chicken Paratha Roll, Zinger Shawarma, Chicken Shawarma, 1.5 Ltr Drink" },
+        { "name": "Deal 8", "price": 2350, "description": "5 Zinger Burger, Family Fries, 1.5 Ltr Drink" },
+        { "name": "Deal 9", "price": 1550, "description": "Small Pizza, Arabic Wrap, 1 Patty Burger, 1.5 Ltr Drink" },
+        { "name": "Family Deal 1", "price": 3200, "description": "1 Medium Pizza Special, 2 Zinger Burger, Large Fries, 10 Hot Wings, 1.5 Ltr Drink" },
+        { "name": "Family Deal 2", "price": 3850, "description": "1 Large Pizza Tikka, 1 Special Sandwich, 10 Hot Wings, Family Fries, Full Paista + 1.5 Ltr Drink" },
+        { "name": "Family Deal 3", "price": 4900, "description": "2 Medium Pizza, 1 Pizza Burger, 2 Piece Cheese Roll, 1 Chicken Wrap, Family Fries, 2 Drink 1.5 Ltr" }
+      ]
+    }
+  ]
+}

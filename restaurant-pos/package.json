@@ -1,0 +1,55 @@
+{
+  "name": "restaurant-pos",
+  "version": "1.0.0",
+  "description": "Papa'Zzz restaurant POS",
+  "main": "src/main/main.js",
+  "private": true,
+  "author": "Papa'Zzz",
+  "scripts": {
+    "start": "electron .",
+    "dist": "electron-builder --win --x64"
+  },
+  "dependencies": {
+    "@babel/standalone": "^7.25.6",
+    "better-sqlite3": "^11.3.0",
+    "react": "^18.3.1",
+    "react-dom": "^18.3.1"
+  },
+  "devDependencies": {
+    "@electron/rebuild": "^4.2.0",
+    "electron": "^31.3.1",
+    "electron-builder": "^25.1.8"
+  },
+  "allowScripts": {
+    "better-sqlite3@11.10.0": true,
+    "electron@31.7.7": true
+  },
+  "build": {
+    "appId": "com.papazzz.pos",
+    "productName": "Papa'Zzz POS",
+    "files": [
+      "src/**/*",
+      "build/icon.ico",
+      "menu.json",
+      "node_modules/react/**/*",
+      "node_modules/react-dom/**/*",
+      "node_modules/@babel/standalone/**/*",
+      "node_modules/better-sqlite3/**/*",
+      "node_modules/bindings/**/*",
+      "node_modules/file-uri-to-path/**/*"
+    ],
+    "asarUnpack": [
+      "node_modules/better-sqlite3/**/*"
+    ],
+    "win": {
+      "target": "nsis",
+      "icon": "build/icon.ico"
+    },
+    "nsis": {
+      "oneClick": false,
+      "allowToChangeInstallationDirectory": true,
+      "createDesktopShortcut": true,
+      "shortcutName": "Papa'Zzz POS"
+    }
+  }
+}

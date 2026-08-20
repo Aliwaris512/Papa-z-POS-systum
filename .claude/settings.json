@@ -18,7 +18,8 @@
       "Bash(ls -la \"/c/Users/HP/OneDrive/Papa Zzz POS Backup\" 2>&1)",
       "Read(//c/Users/HP/OneDrive/Papa Zzz POS Backup/**)",
       "Bash(rm \"/c/Users/HP/AppData/Roaming/restaurant-pos/pos.db\" && echo \"local db deleted\")",
-      "Bash(rm -f \"/c/Users/HP/AppData/Roaming/restaurant-pos/pos.db\")"
+      "Bash(rm -f \"/c/Users/HP/AppData/Roaming/restaurant-pos/pos.db\")",
+      "Bash(node -e \"require\\('fs'\\).readFileSync\\('src/renderer/styles.css','utf8'\\)\")"
     ],
     "additionalDirectories": [
       "C:\\Users\\HP\\AppData\\Roaming\\restaurant-pos"

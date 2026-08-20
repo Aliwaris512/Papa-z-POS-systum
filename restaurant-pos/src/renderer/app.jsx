@@ -111,6 +111,58 @@ function AddItemModal({ categories, defaultCategoryId, onClose, onSave }) {
   );
 }
 
+function AddOnModal({ onClose, onSave }) {
+  const [name, setName] = useState('');
+  const [price, setPrice] = useState('');
+  const [error, setError] = useState('');
+
+  function handleSave() {
+    const trimmedName = name.trim();
+    const numPrice = Number(price);
+    if (!trimmedName) {
+      setError('Enter item name.');
+      return;
+    }
+    if (!price || isNaN(numPrice) || numPrice <= 0) {
+      setError('Enter valid price.');
+      return;
+    }
+    onSave({ name: trimmedName, price: numPrice });
+  }
+
+  return (
+    <div className="modal-overlay" onClick={onClose}>
+      <div className="modal-card" onClick={(e) => e.stopPropagation()}>
+        <div className="modal-header">Add Custom Item</div>
+        <div className="modal-body">
+          <label className="modal-label">Name</label>
+          <input
+            type="text"
+            className="modal-input"
+            value={name}
+            onChange={(e) => setName(e.target.value)}
+            placeholder="Item name"
+            autoFocus
+          />
+          <label className="modal-label">Price (Rs.)</label>
+          <input
+            type="number"
+            className="modal-input"
+            value={price}
+            onChange={(e) => setPrice(e.target.value)}
+            placeholder="0"
+          />
+          {error && <div className="modal-error">{error}</div>}
+        </div>
+        <div className="modal-actions">
+          <button className="back-btn" onClick={onClose}>Cancel</button>
+          <button className="confirm-btn" onClick={handleSave}>Add to Order</button>
+        </div>
+      </div>
+    </div>
+  );
+}
+
 function CartLine({ line, onInc, onDec, onRemove }) {
   return (
     <div className="cart-line">
@@ -129,7 +181,7 @@ function CartLine({ line, onInc, onDec, onRemove }) {
   );
 }
 
-function CartPanel({ cart, onInc, onDec, onRemove, onClear, onCheckout }) {
+function CartPanel({ cart, onInc, onDec, onRemove, onClear, onCheckout, onAddOn }) {
   const grandTotal = cart.reduce((sum, l) => sum + l.price * l.qty, 0);
 
   return (
@@ -142,6 +194,7 @@ function CartPanel({ cart, onInc, onDec, onRemove, onClear, onCheckout }) {
         ))}
       </div>
       <div className="cart-footer">
+        <button className="addon-btn" onClick={onAddOn}>+ Add Custom Item</button>
         <div className="cart-total-row">
           <span>Total</span>
           <span>Rs. {grandTotal}</span>
@@ -434,6 +487,168 @@ function HistoryView({ orders, onSelectOrder, onExport, onDelete, onBack, export
   );
 }
 
+function InventoryItemModal({ item, onClose, onSave }) {
+  const [name, setName] = useState(item ? item.name : '');
+  const [unit, setUnit] = useState(item ? item.unit : '');
+  const [currentQty, setCurrentQty] = useState(item ? String(item.current_qty) : '');
+  const [reorderLevel, setReorderLevel] = useState(item ? String(item.reorder_level) : '');
+  const [unitCost, setUnitCost] = useState(item ? String(item.unit_cost) : '');
+  const [error, setError] = useState('');
+
+  function handleSave() {
+    const trimmedName = name.trim();
+    const qty = Number(currentQty);
+    const reorder = Number(reorderLevel);
+    const cost = Number(unitCost);
+    if (!trimmedName) {
+      setError('Enter item name.');
+      return;
+    }
+    if (currentQty === '' || isNaN(qty) || qty < 0) {
+      setError('Enter valid current quantity.');
+      return;
+    }
+    if (reorderLevel === '' || isNaN(reorder) || reorder < 0) {
+      setError('Enter valid reorder level.');
+      return;
+    }
+    if (unitCost === '' || isNaN(cost) || cost < 0) {
+      setError('Enter valid unit cost.');
+      return;
+    }
+    onSave({
+      id: item ? item.id : undefined,
+      name: trimmedName,
+      unit: unit.trim(),
+      currentQty: qty,
+      reorderLevel: reorder,
+      unitCost: cost
+    });
+  }
+
+  return (
+    <div className="modal-overlay" onClick={onClose}>
+      <div className="modal-card" onClick={(e) => e.stopPropagation()}>
+        <div className="modal-header">{item ? 'Edit Stock Item' : 'Add Stock Item'}</div>
+        <div className="modal-body">
+          <label className="modal-label">Name</label>
+          <input
+            type="text"
+            className="modal-input"
+            value={name}
+            onChange={(e) => setName(e.target.value)}
+            placeholder="e.g. Chicken Breast"
+            autoFocus
+          />
+          <label className="modal-label">Unit</label>
+          <input
+            type="text"
+            className="modal-input"
+            value={unit}
+            onChange={(e) => setUnit(e.target.value)}
+            placeholder="e.g. kg, pcs, litre"
+          />
+          <label className="modal-label">Current Quantity</label>
+          <input
+            type="number"
+            className="modal-input"
+            value={currentQty}
+            onChange={(e) => setCurrentQty(e.target.value)}
+            placeholder="0"
+          />
+          <label className="modal-label">Reorder Level (min qty to keep in stock)</label>
+          <input
+            type="number"
+            className="modal-input"
+            value={reorderLevel}
+            onChange={(e) => setReorderLevel(e.target.value)}
+            placeholder="0"
+          />
+          <label className="modal-label">Unit Cost (Rs.)</label>
+          <input
+            type="number"
+            className="modal-input"
+            value={unitCost}
+            onChange={(e) => setUnitCost(e.target.value)}
+            placeholder="0"
+          />
+          {error && <div className="modal-error">{error}</div>}
+        </div>
+        <div className="modal-actions">
+          <button className="back-btn" onClick={onClose}>Cancel</button>
+          <button className="confirm-btn" onClick={handleSave}>Save</button>
+        </div>
+      </div>
+    </div>
+  );
+}
+
+function InventoryView({ items, onBack, onAdd, onEdit, onDelete, onExport, exportMsg }) {
+  const toBuy = items
+    .map((it) => ({ ...it, buyQty: Math.max(it.reorder_level - it.current_qty, 0) }))
+    .filter((it) => it.buyQty > 0);
+  const totalBuyCost = toBuy.reduce((sum, it) => sum + it.buyQty * it.unit_cost, 0);
+
+  return (
+    <div className="history-screen">
+      <div className="history-card">
+        <div className="history-topbar">
+          <div className="history-header">Inventory</div>
+          <div className="history-topbar-actions">
+            <button className="export-btn" onClick={onAdd}>+ Add Stock Item</button>
+            <button className="export-btn" onClick={onExport}>Download CSV</button>
+            <button className="back-btn" onClick={onBack}>Back to Menu</button>
+          </div>
+        </div>
+
+        {exportMsg && <div className="export-msg">{exportMsg}</div>}
+
+        {toBuy.length > 0 && (
+          <div className="export-msg">
+            {toBuy.length} item{toBuy.length === 1 ? '' : 's'} need restock &middot; Est. cost Rs. {totalBuyCost.toFixed(2)}
+          </div>
+        )}
+
+        <div className="history-list">
+          <div className="history-row history-row-head">
+            <span className="hc-id">Item</span>
+            <span className="hc-date">Current / Reorder</span>
+            <span className="hc-total">Buy Qty</span>
+            <span className="hc-pay">Buy Cost</span>
+            <span className="hc-actions"></span>
+          </div>
+          {items.length === 0 && <div className="empty-state">No stock items yet. Add one above.</div>}
+          {items.map((it) => {
+            const buyQty = Math.max(it.reorder_level - it.current_qty, 0);
+            const buyCost = buyQty * it.unit_cost;
+            const low = buyQty > 0;
+            return (
+              <div
+                key={it.id}
+                className={"history-row history-row-item" + (low ? " low-stock" : "")}
+                onClick={() => onEdit(it)}
+              >
+                <span className="hc-id">{it.name}</span>
+                <span className="hc-date">{it.current_qty} {it.unit} / {it.reorder_level} {it.unit}</span>
+                <span className="hc-total">{low ? `${buyQty} ${it.unit}` : '-'}</span>
+                <span className="hc-pay">{low ? `Rs. ${buyCost.toFixed(2)}` : '-'}</span>
+                <span className="hc-actions">
+                  <button
+                    className="delete-order-btn"
+                    onClick={(e) => { e.stopPropagation(); onDelete(it.id); }}
+                  >
+                    Delete
+                  </button>
+                </span>
+              </div>
+            );
+          })}
+        </div>
+      </div>
+    </div>
+  );
+}
+
 function App() {
   const [categories, setCategories] = useState([]);
   const [selectedId, setSelectedId] = useState(null);
@@ -445,6 +660,11 @@ function App() {
   const [fromHistory, setFromHistory] = useState(false);
   const [exportMsg, setExportMsg] = useState('');
   const [showAddItem, setShowAddItem] = useState(false);
+  const [showAddOn, setShowAddOn] = useState(false);
+  const [inventory, setInventory] = useState([]);
+  const [showInventoryItem, setShowInventoryItem] = useState(false);
+  const [editingInventoryItem, setEditingInventoryItem] = useState(null);
+  const [inventoryExportMsg, setInventoryExportMsg] = useState('');
 
   useEffect(() => {
     window.api.getCategories().then((cats) => {
@@ -488,6 +708,11 @@ function App() {
 
   function clearOrder() {
     setCart([]);
+  }
+
+  function addOnToCart({ name, price }) {
+    setCart((prev) => [...prev, { id: `addon-${Date.now()}`, name, price, qty: 1 }]);
+    setShowAddOn(false);
   }
 
   async function confirmOrder(paymentMethod) {
@@ -555,6 +780,48 @@ function App() {
     setOrders(rows);
   }
 
+  async function openInventory() {
+    const rows = await window.api.getInventory();
+    setInventory(rows);
+    setInventoryExportMsg('');
+    setView('inventory');
+  }
+
+  async function exportInventoryCsv() {
+    const result = await window.api.exportInventoryCsv();
+    if (result.canceled) return;
+    setInventoryExportMsg(`Exported ${result.count} item${result.count === 1 ? '' : 's'} to ${result.filePath}`);
+  }
+
+  function openAddInventoryItem() {
+    setEditingInventoryItem(null);
+    setShowInventoryItem(true);
+  }
+
+  function openEditInventoryItem(item) {
+    setEditingInventoryItem(item);
+    setShowInventoryItem(true);
+  }
+
+  async function saveInventoryItem(payload) {
+    if (payload.id) {
+      await window.api.updateInventoryItem(payload);
+    } else {
+      await window.api.addInventoryItem(payload);
+    }
+    const rows = await window.api.getInventory();
+    setInventory(rows);
+    setShowInventoryItem(false);
+    setEditingInventoryItem(null);
+  }
+
+  async function deleteInventoryItem(id) {
+    if (!window.confirm('Delete this stock item?')) return;
+    await window.api.deleteInventoryItem(id);
+    const rows = await window.api.getInventory();
+    setInventory(rows);
+  }
+
   async function exportCsv(range) {
     const result = await window.api.exportOrdersCsv(range);
     if (result.canceled) return;
@@ -591,6 +858,27 @@ function App() {
         exportMsg={exportMsg}
       />
     );
+  } else if (view === 'inventory') {
+    content = (
+      <>
+        <InventoryView
+          items={inventory}
+          onBack={() => setView('menu')}
+          onAdd={openAddInventoryItem}
+          onEdit={openEditInventoryItem}
+          onDelete={deleteInventoryItem}
+          onExport={exportInventoryCsv}
+          exportMsg={inventoryExportMsg}
+        />
+        {showInventoryItem && (
+          <InventoryItemModal
+            item={editingInventoryItem}
+            onClose={() => { setShowInventoryItem(false); setEditingInventoryItem(null); }}
+            onSave={saveInventoryItem}
+          />
+        )}
+      </>
+    );
   } else {
     content = (
       <div className="app">
@@ -600,6 +888,7 @@ function App() {
             <span>{selectedCategory ? selectedCategory.name : ''}</span>
             <div className="panel-header-actions">
               <button className="add-item-nav-btn" onClick={() => setShowAddItem(true)}>+ Add Item</button>
+              <button className="history-nav-btn" onClick={openInventory}>Inventory</button>
               <button className="history-nav-btn" onClick={openHistory}>Order History</button>
             </div>
           </div>
@@ -612,6 +901,7 @@ function App() {
           onRemove={removeLine}
           onClear={clearOrder}
           onCheckout={() => setView('checkout')}
+          onAddOn={() => setShowAddOn(true)}
         />
         {showAddItem && (
           <AddItemModal
@@ -619,6 +909,12 @@ function App() {
             defaultCategoryId={selectedId}
             onClose={() => setShowAddItem(false)}
             onSave={saveNewItem}
+          />
+        )}
+        {showAddOn && (
+          <AddOnModal
+            onClose={() => setShowAddOn(false)}
+            onSave={addOnToCart}
           />
         )}
       </div>

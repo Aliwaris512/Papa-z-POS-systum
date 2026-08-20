@@ -29,6 +29,14 @@ function getDb() {
       total INTEGER NOT NULL,
       payment_method TEXT NOT NULL
     );
+    CREATE TABLE IF NOT EXISTS inventory (
+      id INTEGER PRIMARY KEY AUTOINCREMENT,
+      name TEXT NOT NULL,
+      unit TEXT NOT NULL DEFAULT '',
+      current_qty REAL NOT NULL DEFAULT 0,
+      reorder_level REAL NOT NULL DEFAULT 0,
+      unit_cost REAL NOT NULL DEFAULT 0
+    );
   `);
 
   seedIfEmpty(db);

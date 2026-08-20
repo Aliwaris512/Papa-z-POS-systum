@@ -136,6 +136,55 @@ app.whenReady().then(() => {
     return { canceled: false, filePath, count: orders.length };
   });
 
+  ipcMain.handle('inventory:getAll', () => {
+    return db.prepare('SELECT * FROM inventory ORDER BY name').all();
+  });
+
+  ipcMain.handle('inventory:add', (_event, { name, unit, currentQty, reorderLevel, unitCost }) => {
+    const stmt = db.prepare(
+      'INSERT INTO inventory (name, unit, current_qty, reorder_level, unit_cost) VALUES (?, ?, ?, ?, ?)'
+    );
+    const result = stmt.run(name, unit || '', currentQty || 0, reorderLevel || 0, unitCost || 0);
+    backupDb();
+    return { id: result.lastInsertRowid };
+  });
+
+  ipcMain.handle('inventory:update', (_event, { id, name, unit, currentQty, reorderLevel, unitCost }) => {
+    db.prepare(
+      'UPDATE inventory SET name = ?, unit = ?, current_qty = ?, reorder_level = ?, unit_cost = ? WHERE id = ?'
+    ).run(name, unit || '', currentQty || 0, reorderLevel || 0, unitCost || 0, id);
+    backupDb();
+    return { updated: true };
+  });
+
+  ipcMain.handle('inventory:delete', (_event, id) => {
+    db.prepare('DELETE FROM inventory WHERE id = ?').run(id);
+    backupDb();
+    return { deleted: true };
+  });
+
+  ipcMain.handle('inventory:exportCsv', async (event) => {
+    const win = BrowserWindow.fromWebContents(event.sender);
+    const { canceled, filePath } = await dialog.showSaveDialog(win, {
+      title: 'Export Inventory to CSV',
+      defaultPath: `inventory-${new Date().toISOString().slice(0, 10)}.csv`,
+      filters: [{ name: 'CSV', extensions: ['csv'] }]
+    });
+    if (canceled || !filePath) return { canceled: true };
+
+    const items = db.prepare('SELECT * FROM inventory ORDER BY name').all();
+    const header = 'id,name,unit,current_qty,reorder_level,unit_cost,buy_qty,buy_cost';
+    const rows = items.map((it) => {
+      const buyQty = Math.max(it.reorder_level - it.current_qty, 0);
+      const buyCost = buyQty * it.unit_cost;
+      return [it.id, it.name, it.unit, it.current_qty, it.reorder_level, it.unit_cost, buyQty, buyCost]
+        .map(csvEscape)
+        .join(',');
+    });
+    fs.writeFileSync(filePath, [header, ...rows].join('\n'), 'utf-8');
+    return { canceled: false, filePath, count: items.length };
+  });
+
   createWindow();
 
   app.on('activate', () => {

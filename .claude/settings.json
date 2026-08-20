@@ -1,0 +1,27 @@
+{
+  "permissions": {
+    "allow": [
+      "Bash(powershell -Command 'Add-Type -AssemblyName System.Drawing; $i=[System.Drawing.Icon]::ExtractAssociatedIcon\\('\\\\''C:\\\\Users\\\\HP\\\\Desktop\\\\Papa'\\\\'''\\\\''z billing systum\\\\restaurant-pos\\\\dist\\\\win-unpacked\\\\Papa'\\\\'''\\\\''Zzz POS.exe'\\\\''\\); $i.Width')",
+      "Bash(python3 -c ' *)",
+      "Read(//c/Users/HP/AppData/Local/Temp/claude/**)",
+      "PowerShell(Get-ChildItem \"$env:APPDATA\" -Directory | Sort-Object LastWriteTime -Descending | Select-Object -First 15 Name,LastWriteTime)",
+      "Bash(node -e ' *)",
+      "Bash(\"./Papa'Zzz POS.exe\")",
+      "Read(//c/Users/HP/OneDrive/**)",
+      "Bash(taskkill //IM \"Papa'Zzz POS.exe\" //F)",
+      "Bash(env)",
+      "Bash(cmd //c \"echo %OneDrive%\")",
+      "Bash(cmd //c \"echo %OneDriveConsumer%\")",
+      "Bash(mkdir -p \"/c/Users/HP/OneDrive/Papa Zzz POS Backup\")",
+      "Bash(echo test *)",
+      "Bash(rm -rf \"/c/Users/HP/OneDrive/Papa Zzz POS Backup\")",
+      "Bash(ls -la \"/c/Users/HP/OneDrive/Papa Zzz POS Backup\" 2>&1)",
+      "Read(//c/Users/HP/OneDrive/Papa Zzz POS Backup/**)",
+      "Bash(rm \"/c/Users/HP/AppData/Roaming/restaurant-pos/pos.db\" && echo \"local db deleted\")",
+      "Bash(rm -f \"/c/Users/HP/AppData/Roaming/restaurant-pos/pos.db\")"
+    ],
+    "additionalDirectories": [
+      "C:\\Users\\HP\\AppData\\Roaming\\restaurant-pos"
+    ]
+  }
+}

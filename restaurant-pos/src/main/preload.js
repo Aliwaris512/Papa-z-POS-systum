@@ -5,6 +5,8 @@ contextBridge.exposeInMainWorld('api', {
   getItemsByCategory: (categoryId) => ipcRenderer.invoke('menu:getItemsByCategory', categoryId),
   addItem: (item) => ipcRenderer.invoke('menu:addItem', item),
   deleteItem: (itemId) => ipcRenderer.invoke('menu:deleteItem', itemId),
+  getRecipe: (itemId) => ipcRenderer.invoke('menu:getRecipe', itemId),
+  saveRecipe: (payload) => ipcRenderer.invoke('menu:saveRecipe', payload),
   saveOrder: (order) => ipcRenderer.invoke('orders:save', order),
   printReceipt: () => ipcRenderer.invoke('app:printReceipt'),
   getOrders: () => ipcRenderer.invoke('orders:getAll'),

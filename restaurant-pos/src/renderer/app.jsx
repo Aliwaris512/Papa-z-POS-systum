@@ -6,40 +6,81 @@ function Sidebar({ categories, selectedId, onSelect }) {
       {categories.map((cat) => (
         <button
           key={cat.id}
-          className={"cat-tab" + (cat.id === selectedId ? " active" : "")}
+          className={
+            "cat-tab" +
+            (cat.name === 'Big Offers' ? " cat-tab-offer" : "") +
+            (cat.id === selectedId ? " active" : "")
+          }
           onClick={() => onSelect(cat.id)}
         >
-          {cat.name}
+          {cat.name === 'Big Offers' ? '🔥 Big Offers' : cat.name}
         </button>
       ))}
     </div>
   );
 }
 
-function ItemCard({ item, onAdd, onDelete }) {
+function ItemCard({ item, onAdd, onDelete, onEditRecipe }) {
+  const sizes = item.sizes ? JSON.parse(item.sizes) : null;
+  const sizeKeys = sizes ? Object.keys(sizes) : [];
+  const [selectedSize, setSelectedSize] = useState(sizeKeys[0] || null);
+
+  const displayPrice = sizes ? sizes[selectedSize] : item.price;
+
+  function handleAdd(e) {
+    e.stopPropagation();
+    if (sizes) {
+      onAdd({ ...item, name: `${item.name} (${selectedSize})`, price: sizes[selectedSize], id: `${item.id}-${selectedSize}`, menuItemId: item.id });
+    } else {
+      onAdd({ ...item, menuItemId: item.id });
+    }
+  }
+
   return (
-    <div className="item-card" onClick={() => onAdd(item)}>
+    <div className="item-card" onClick={sizes ? undefined : handleAdd}>
       <button
         className="delete-item-btn"
         onClick={(e) => { e.stopPropagation(); onDelete(item.id); }}
       >
         &times;
       </button>
+      <button
+        className="recipe-item-btn"
+        onClick={(e) => { e.stopPropagation(); onEditRecipe(item); }}
+      >
+        Recipe
+      </button>
       <div className="item-name">{item.name}</div>
       {item.description && <div className="item-desc">{item.description}</div>}
-      <div className="item-price">Rs. {item.price}</div>
+      {sizes && (
+        <div className="size-options">
+          {sizeKeys.map((s) => (
+            <button
+              key={s}
+              className={"size-btn" + (s === selectedSize ? " active" : "")}
+              onClick={(e) => { e.stopPropagation(); setSelectedSize(s); }}
+            >
+              {s}
+            </button>
+          ))}
+        </div>
+      )}
+      <div className="item-card-footer">
+        <div className="item-price">Rs. {displayPrice}</div>
+        {sizes && <button className="add-btn" onClick={handleAdd}>Add</button>}
+      </div>
     </div>
   );
 }
 
-function ItemGrid({ items, onAdd, onDelete }) {
+function ItemGrid({ items, onAdd, onDelete, onEditRecipe }) {
   if (!items.length) {
     return <div className="empty-state">No items in this category.</div>;
   }
   return (
     <div className="item-grid">
       {items.map((item) => (
-        <ItemCard key={item.id} item={item} onAdd={onAdd} onDelete={onDelete} />
+        <ItemCard key={item.id} item={item} onAdd={onAdd} onDelete={onDelete} onEditRecipe={onEditRecipe} />
       ))}
     </div>
   );
@@ -163,6 +204,46 @@ function AddOnModal({ onClose, onSave }) {
   );
 }
 
+const ADMIN_PASSWORD = 'Admin@512';
+
+function PasswordModal({ message, onClose, onConfirm }) {
+  const [password, setPassword] = useState('');
+  const [error, setError] = useState('');
+
+  function handleConfirm() {
+    if (password !== ADMIN_PASSWORD) {
+      setError('Wrong password.');
+      return;
+    }
+    onConfirm();
+  }
+
+  return (
+    <div className="modal-overlay" onClick={onClose}>
+      <div className="modal-card" onClick={(e) => e.stopPropagation()}>
+        <div className="modal-header">Admin Password Required</div>
+        <div className="modal-body">
+          <div className="modal-label">{message}</div>
+          <input
+            type="password"
+            className="modal-input"
+            value={password}
+            onChange={(e) => setPassword(e.target.value)}
+            placeholder="Enter admin password"
+            autoFocus
+            onKeyDown={(e) => { if (e.key === 'Enter') handleConfirm(); }}
+          />
+          {error && <div className="modal-error">{error}</div>}
+        </div>
+        <div className="modal-actions">
+          <button className="back-btn" onClick={onClose}>Cancel</button>
+          <button className="confirm-btn" onClick={handleConfirm}>Confirm Delete</button>
+        </div>
+      </div>
+    </div>
+  );
+}
+
 function CartLine({ line, onInc, onDec, onRemove }) {
   return (
     <div className="cart-line">
@@ -212,7 +293,25 @@ function CartPanel({ cart, onInc, onDec, onRemove, onClear, onCheckout, onAddOn 
 
 function CheckoutView({ cart, onBack, onConfirm }) {
   const [paymentMethod, setPaymentMethod] = useState(null);
+  const [paymentStatus, setPaymentStatus] = useState(null);
+  const [orderType, setOrderType] = useState('Dine-in');
+  const [note, setNote] = useState('');
+  const [customerPhone, setCustomerPhone] = useState('');
+  const [customerAddress, setCustomerAddress] = useState('');
   const grandTotal = cart.reduce((sum, l) => sum + l.price * l.qty, 0);
+
+  const canConfirm = paymentMethod && paymentStatus && (orderType !== 'Delivery' || (customerPhone.trim() && customerAddress.trim()));
+
+  function handleConfirm() {
+    onConfirm({
+      paymentMethod,
+      paymentStatus,
+      orderType,
+      note: note.trim(),
+      customerPhone: orderType === 'Delivery' ? customerPhone.trim() : '',
+      customerAddress: orderType === 'Delivery' ? customerAddress.trim() : ''
+    });
+  }
 
   return (
     <div className="checkout-view">
@@ -236,6 +335,60 @@ function CheckoutView({ cart, onBack, onConfirm }) {
         </div>
 
         <div className="payment-section">
+          <div className="payment-label">Order Type</div>
+          <div className="payment-options">
+            <button
+              className={"payment-btn" + (orderType === 'Dine-in' ? ' active' : '')}
+              onClick={() => setOrderType('Dine-in')}
+            >
+              Dine-in
+            </button>
+            <button
+              className={"payment-btn" + (orderType === 'Takeaway' ? ' active' : '')}
+              onClick={() => setOrderType('Takeaway')}
+            >
+              Takeaway
+            </button>
+            <button
+              className={"payment-btn" + (orderType === 'Delivery' ? ' active' : '')}
+              onClick={() => setOrderType('Delivery')}
+            >
+              Delivery
+            </button>
+          </div>
+        </div>
+
+        {orderType === 'Delivery' && (
+          <div className="payment-section">
+            <div className="payment-label">Delivery Details</div>
+            <input
+              type="text"
+              className="modal-input"
+              placeholder="Customer phone number"
+              value={customerPhone}
+              onChange={(e) => setCustomerPhone(e.target.value)}
+            />
+            <input
+              type="text"
+              className="modal-input"
+              placeholder="Delivery address"
+              value={customerAddress}
+              onChange={(e) => setCustomerAddress(e.target.value)}
+            />
+          </div>
+        )}
+
+        <div className="payment-section">
+          <div className="payment-label">Note (optional)</div>
+          <textarea
+            className="modal-input checkout-note"
+            placeholder="e.g. no onions, extra spicy..."
+            value={note}
+            onChange={(e) => setNote(e.target.value)}
+          />
+        </div>
+
+        <div className="payment-section">
           <div className="payment-label">Payment Method</div>
           <div className="payment-options">
             <button
@@ -253,12 +406,30 @@ function CheckoutView({ cart, onBack, onConfirm }) {
           </div>
         </div>
 
+        <div className="payment-section">
+          <div className="payment-label">Bill Status</div>
+          <div className="payment-options">
+            <button
+              className={"payment-btn" + (paymentStatus === 'Paid' ? ' active' : '')}
+              onClick={() => setPaymentStatus('Paid')}
+            >
+              Paid
+            </button>
+            <button
+              className={"payment-btn" + (paymentStatus === 'Pending' ? ' active' : '')}
+              onClick={() => setPaymentStatus('Pending')}
+            >
+              Pending
+            </button>
+          </div>
+        </div>
+
         <div className="checkout-actions">
           <button className="back-btn" onClick={onBack}>Back</button>
           <button
             className="confirm-btn"
-            disabled={!paymentMethod}
-            onClick={() => onConfirm(paymentMethod)}
+            disabled={!canConfirm}
+            onClick={handleConfirm}
           >
             Confirm & Generate Receipt
           </button>
@@ -297,7 +468,17 @@ function ReceiptView({ order, onNewOrder, fromHistory, onBackToHistory }) {
         <div className="receipt-meta">
           <div>Order #{order.orderId}</div>
           <div>{dateStr} {timeStr}</div>
+          {order.orderType && <div>Order Type: {order.orderType}</div>}
         </div>
+        {order.orderType === 'Delivery' && (order.customerPhone || order.customerAddress) && (
+          <>
+            <div className="receipt-divider" />
+            <div className="receipt-meta">
+              {order.customerPhone && <div>Phone: {order.customerPhone}</div>}
+              {order.customerAddress && <div>Address: {order.customerAddress}</div>}
+            </div>
+          </>
+        )}
         <div className="receipt-divider" />
         <div className="receipt-items">
           <div className="receipt-row receipt-col-head">
@@ -324,6 +505,18 @@ function ReceiptView({ order, onNewOrder, fromHistory, onBackToHistory }) {
           <span>Payment Method</span>
           <span>{order.paymentMethod}</span>
         </div>
+        {order.paymentStatus && (
+          <div className={"receipt-row" + (order.paymentStatus === 'Pending' ? ' receipt-status-pending' : '')}>
+            <span>Bill Status</span>
+            <span>{order.paymentStatus}</span>
+          </div>
+        )}
+        {order.note && (
+          <>
+            <div className="receipt-divider" />
+            <div className="receipt-note">Note: {order.note}</div>
+          </>
+        )}
         <div className="receipt-divider" />
         <div className="receipt-thankyou">Thank you, visit again!</div>
         <div className="receipt-dev-contact">{DEV_CONTACT}</div>
@@ -583,6 +776,52 @@ function InventoryItemModal({ item, onClose, onSave }) {
   );
 }
 
+function RecipeModal({ item, inventory, recipe, onClose, onSave }) {
+  const initialQtys = {};
+  recipe.forEach((r) => { initialQtys[r.ingredient_id] = String(r.qty_per_unit); });
+  const [qtys, setQtys] = useState(initialQtys);
+
+  function setQty(ingredientId, val) {
+    setQtys((prev) => ({ ...prev, [ingredientId]: val }));
+  }
+
+  function handleSave() {
+    const ingredients = Object.entries(qtys)
+      .map(([ingredientId, val]) => ({ ingredientId: Number(ingredientId), qtyPerUnit: Number(val) }))
+      .filter((ing) => !isNaN(ing.qtyPerUnit) && ing.qtyPerUnit > 0);
+    onSave({ itemId: item.id, ingredients });
+  }
+
+  return (
+    <div className="modal-overlay" onClick={onClose}>
+      <div className="modal-card" onClick={(e) => e.stopPropagation()}>
+        <div className="modal-header">Recipe: {item.name}</div>
+        <div className="modal-body">
+          {inventory.length === 0 && <div className="empty-state">Add stock items in Inventory first.</div>}
+          {inventory.map((inv) => (
+            <div key={inv.id} className="recipe-row">
+              <span className="recipe-row-name">{inv.name} <span className="recipe-row-unit">({inv.unit})</span></span>
+              <input
+                type="number"
+                className="modal-input recipe-row-input"
+                value={qtys[inv.id] || ''}
+                onChange={(e) => setQty(inv.id, e.target.value)}
+                placeholder="0"
+                min="0"
+                step="any"
+              />
+            </div>
+          ))}
+        </div>
+        <div className="modal-actions">
+          <button className="back-btn" onClick={onClose}>Cancel</button>
+          <button className="confirm-btn" onClick={handleSave}>Save Recipe</button>
+        </div>
+      </div>
+    </div>
+  );
+}
+
 function InventoryView({ items, onBack, onAdd, onEdit, onDelete, onExport, exportMsg }) {
   const toBuy = items
     .map((it) => ({ ...it, buyQty: Math.max(it.reorder_level - it.current_qty, 0) }))
@@ -665,12 +904,21 @@ function App() {
   const [showInventoryItem, setShowInventoryItem] = useState(false);
   const [editingInventoryItem, setEditingInventoryItem] = useState(null);
   const [inventoryExportMsg, setInventoryExportMsg] = useState('');
+  const [pendingDelete, setPendingDelete] = useState(null);
+  const [recipeItem, setRecipeItem] = useState(null);
+  const [recipeRows, setRecipeRows] = useState([]);
+  const [lowStockAlert, setLowStockAlert] = useState([]);
+
+  function requestAdminDelete(message, action) {
+    setPendingDelete({ message, action });
+  }
 
   useEffect(() => {
     window.api.getCategories().then((cats) => {
       setCategories(cats);
       if (cats.length) setSelectedId(cats[0].id);
     });
+    window.api.getInventory().then(setInventory);
   }, []);
 
   useEffect(() => {
@@ -686,7 +934,7 @@ function App() {
       if (existing) {
         return prev.map((l) => (l.id === item.id ? { ...l, qty: l.qty + 1 } : l));
       }
-      return [...prev, { id: item.id, name: item.name, price: item.price, qty: 1 }];
+      return [...prev, { id: item.id, name: item.name, price: item.price, qty: 1, menuItemId: item.menuItemId }];
     });
   }
 
@@ -715,29 +963,56 @@ function App() {
     setShowAddOn(false);
   }
 
-  async function confirmOrder(paymentMethod) {
+  async function confirmOrder({ paymentMethod, paymentStatus, orderType, note, customerPhone, customerAddress }) {
     const grandTotal = cart.reduce((sum, l) => sum + l.price * l.qty, 0);
-    const lineItems = cart.map((l) => ({ id: l.id, name: l.name, price: l.price, qty: l.qty }));
+    const lineItems = cart.map((l) => ({ id: l.id, name: l.name, price: l.price, qty: l.qty, menuItemId: l.menuItemId }));
     const result = await window.api.saveOrder({
       items: lineItems,
       total: grandTotal,
-      paymentMethod
+      paymentMethod,
+      paymentStatus,
+      orderType,
+      note,
+      customerPhone,
+      customerAddress
     });
+    if (result.lowStock && result.lowStock.length) {
+      setLowStockAlert(result.lowStock);
+      window.api.getInventory().then(setInventory);
+    }
     setLastOrder({
       orderId: result.orderId,
       timestamp: result.timestamp,
       items: lineItems,
       total: grandTotal,
-      paymentMethod
+      paymentMethod,
+      paymentStatus,
+      orderType,
+      note,
+      customerPhone,
+      customerAddress
     });
     setCart([]);
     setView('receipt');
   }
 
-  async function deleteItem(itemId) {
-    if (!window.confirm('Delete this item?')) return;
-    await window.api.deleteItem(itemId);
-    window.api.getItemsByCategory(selectedId).then(setItems);
+  function deleteItem(itemId) {
+    requestAdminDelete('Delete this menu item?', async () => {
+      await window.api.deleteItem(itemId);
+      window.api.getItemsByCategory(selectedId).then(setItems);
+    });
+  }
+
+  function openRecipeModal(item) {
+    window.api.getRecipe(item.id).then((rows) => {
+      setRecipeRows(rows);
+      setRecipeItem(item);
+    });
+  }
+
+  async function saveItemRecipe({ itemId, ingredients }) {
+    await window.api.saveRecipe({ itemId, ingredients });
+    setRecipeItem(null);
   }
 
   async function saveNewItem({ name, price, categoryId }) {
@@ -767,17 +1042,24 @@ function App() {
       timestamp: row.timestamp,
       items: JSON.parse(row.items),
       total: row.total,
-      paymentMethod: row.payment_method
+      paymentMethod: row.payment_method,
+      paymentStatus: row.payment_status,
+      orderType: row.order_type,
+      note: row.note,
+      customerPhone: row.customer_phone,
+      customerAddress: row.customer_address
     });
     setFromHistory(true);
     setView('receipt');
   }
 
-  async function deleteOrder(orderId) {
-    if (!window.confirm(`Delete order #${orderId}? This cannot be undone.`)) return;
-    await window.api.deleteOrder(orderId);
-    const rows = await window.api.getOrders();
-    setOrders(rows);
+  function deleteOrder(orderId) {
+    requestAdminDelete(`Delete order #${orderId}? This cannot be undone.`, async () => {
+      await window.api.deleteOrder(orderId);
+      const rows = await window.api.getOrders();
+      setOrders(rows);
+      window.api.getInventory().then(setInventory);
+    });
   }
 
   async function openInventory() {
@@ -815,11 +1097,12 @@ function App() {
     setEditingInventoryItem(null);
   }
 
-  async function deleteInventoryItem(id) {
-    if (!window.confirm('Delete this stock item?')) return;
-    await window.api.deleteInventoryItem(id);
-    const rows = await window.api.getInventory();
-    setInventory(rows);
+  function deleteInventoryItem(id) {
+    requestAdminDelete('Delete this stock item?', async () => {
+      await window.api.deleteInventoryItem(id);
+      const rows = await window.api.getInventory();
+      setInventory(rows);
+    });
   }
 
   async function exportCsv(range) {
@@ -892,7 +1175,7 @@ function App() {
               <button className="history-nav-btn" onClick={openHistory}>Order History</button>
             </div>
           </div>
-          <ItemGrid items={items} onAdd={addToCart} onDelete={deleteItem} />
+          <ItemGrid items={items} onAdd={addToCart} onDelete={deleteItem} onEditRecipe={openRecipeModal} />
         </div>
         <CartPanel
           cart={cart}
@@ -925,6 +1208,43 @@ function App() {
     <div className="app-shell">
       <Header />
       {content}
+      {pendingDelete && (
+        <PasswordModal
+          message={pendingDelete.message}
+          onClose={() => setPendingDelete(null)}
+          onConfirm={() => {
+            pendingDelete.action();
+            setPendingDelete(null);
+          }}
+        />
+      )}
+      {recipeItem && (
+        <RecipeModal
+          item={recipeItem}
+          inventory={inventory}
+          recipe={recipeRows}
+          onClose={() => setRecipeItem(null)}
+          onSave={saveItemRecipe}
+        />
+      )}
+      {lowStockAlert.length > 0 && (
+        <div className="modal-overlay" onClick={() => setLowStockAlert([])}>
+          <div className="modal-card" onClick={(e) => e.stopPropagation()}>
+            <div className="modal-header">Low Stock Alert</div>
+            <div className="modal-body">
+              {lowStockAlert.map((it) => (
+                <div key={it.id} className="recipe-row">
+                  <span className="recipe-row-name">{it.name}</span>
+                  <span>{it.current_qty} {it.unit} left (min {it.reorder_level})</span>
+                </div>
+              ))}
+            </div>
+            <div className="modal-actions">
+              <button className="confirm-btn" onClick={() => setLowStockAlert([])}>OK</button>
+            </div>
+          </div>
+        </div>
+      )}
     </div>
   );
 }

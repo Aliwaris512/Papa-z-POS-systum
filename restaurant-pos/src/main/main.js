@@ -12,6 +12,39 @@ function csvEscape(value) {
 let db;
 let mainWindow;
 
+function applyInventoryDelta(lineItems, direction) {
+  const getRecipe = db.prepare('SELECT ingredient_id, qty_per_unit FROM recipes WHERE item_id = ?');
+  const updateQty = db.prepare('UPDATE inventory SET current_qty = current_qty + ? WHERE id = ?');
+  const lowStock = [];
+
+  lineItems.forEach((line) => {
+    if (!line.menuItemId) return;
+    const recipeRows = getRecipe.all(line.menuItemId);
+    recipeRows.forEach((r) => {
+      const delta = direction * r.qty_per_unit * line.qty;
+      updateQty.run(delta, r.ingredient_id);
+    });
+  });
+
+  if (direction < 0) {
+    const affectedIds = new Set();
+    lineItems.forEach((line) => {
+      if (!line.menuItemId) return;
+      getRecipe.all(line.menuItemId).forEach((r) => affectedIds.add(r.ingredient_id));
+    });
+    if (affectedIds.size) {
+      const rows = db
+        .prepare(`SELECT * FROM inventory WHERE id IN (${[...affectedIds].join(',')})`)
+        .all();
+      rows.forEach((row) => {
+        if (row.current_qty <= row.reorder_level) lowStock.push(row);
+      });
+    }
+  }
+
+  return lowStock;
+}
+
 function getBackupDir() {
   const oneDrive = process.env.OneDriveConsumer || process.env.OneDrive;
   const base = oneDrive || app.getPath('documents');
@@ -70,14 +103,37 @@ app.whenReady().then(() => {
     return db.prepare('SELECT * FROM items WHERE category_id = ? ORDER BY id').all(categoryId);
   });
 
-  ipcMain.handle('orders:save', (_event, { items, total, paymentMethod }) => {
+  ipcMain.handle('orders:save', (_event, { items, total, paymentMethod, paymentStatus, orderType, note, customerPhone, customerAddress }) => {
     const timestamp = new Date().toISOString();
-    const stmt = db.prepare(
-      'INSERT INTO orders (timestamp, items, total, payment_method) VALUES (?, ?, ?, ?)'
-    );
-    const result = stmt.run(timestamp, JSON.stringify(items), total, paymentMethod);
+    const status = paymentStatus || 'Paid';
+    const shouldDeduct = status === 'Paid';
+
+    let lowStock = [];
+    const run = db.transaction(() => {
+      const stmt = db.prepare(
+        'INSERT INTO orders (timestamp, items, total, payment_method, payment_status, order_type, note, customer_phone, customer_address, inventory_applied) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?)'
+      );
+      const result = stmt.run(
+        timestamp,
+        JSON.stringify(items),
+        total,
+        paymentMethod,
+        status,
+        orderType || 'Dine-in',
+        note || null,
+        customerPhone || null,
+        customerAddress || null,
+        shouldDeduct ? 1 : 0
+      );
+      if (shouldDeduct) {
+        lowStock = applyInventoryDelta(items, -1);
+      }
+      return result.lastInsertRowid;
+    });
+
+    const orderId = run();
     backupDb();
-    return { orderId: result.lastInsertRowid, timestamp };
+    return { orderId, timestamp, lowStock };
   });
 
   ipcMain.handle('menu:addItem', (_event, { name, price, categoryId, description }) => {
@@ -95,9 +151,39 @@ app.whenReady().then(() => {
     return { deleted: true };
   });
 
+  ipcMain.handle('menu:getRecipe', (_event, itemId) => {
+    return db
+      .prepare(
+        `SELECT r.ingredient_id, r.qty_per_unit, inv.name, inv.unit
+         FROM recipes r JOIN inventory inv ON inv.id = r.ingredient_id
+         WHERE r.item_id = ? ORDER BY inv.name`
+      )
+      .all(itemId);
+  });
+
+  ipcMain.handle('menu:saveRecipe', (_event, { itemId, ingredients }) => {
+    const run = db.transaction(() => {
+      db.prepare('DELETE FROM recipes WHERE item_id = ?').run(itemId);
+      const insert = db.prepare(
+        'INSERT INTO recipes (item_id, ingredient_id, qty_per_unit) VALUES (?, ?, ?)'
+      );
+      (ingredients || []).forEach((ing) => {
+        if (ing.qtyPerUnit > 0) insert.run(itemId, ing.ingredientId, ing.qtyPerUnit);
+      });
+    });
+    run();
+    backupDb();
+    return { saved: true };
+  });
+
   ipcMain.handle('app:printReceipt', (event) => {
     const win = BrowserWindow.fromWebContents(event.sender);
-    win.webContents.print({ silent: false, printBackground: true });
+    win.webContents.print({
+      silent: false,
+      printBackground: true,
+      margins: { marginType: 'none' },
+      pageSize: { width: 80000, height: 297000 }
+    });
   });
 
   ipcMain.handle('orders:getAll', () => {
@@ -105,6 +191,10 @@ app.whenReady().then(() => {
   });
 
   ipcMain.handle('orders:delete', (_event, orderId) => {
+    const order = db.prepare('SELECT items, inventory_applied FROM orders WHERE order_id = ?').get(orderId);
+    if (order && order.inventory_applied) {
+      applyInventoryDelta(JSON.parse(order.items), 1);
+    }
     db.prepare('DELETE FROM orders WHERE order_id = ?').run(orderId);
     backupDb();
     return { deleted: true };
@@ -128,9 +218,9 @@ app.whenReady().then(() => {
       orders = db.prepare('SELECT * FROM orders ORDER BY order_id DESC').all();
     }
 
-    const header = 'order_id,timestamp,items,total,payment_method';
+    const header = 'order_id,timestamp,items,total,payment_method,payment_status,order_type,note,customer_phone,customer_address';
     const rows = orders.map((o) =>
-      [o.order_id, o.timestamp, o.items, o.total, o.payment_method].map(csvEscape).join(',')
+      [o.order_id, o.timestamp, o.items, o.total, o.payment_method, o.payment_status, o.order_type, o.note, o.customer_phone, o.customer_address].map(csvEscape).join(',')
     );
     fs.writeFileSync(filePath, [header, ...rows].join('\n'), 'utf-8');
     return { canceled: false, filePath, count: orders.length };

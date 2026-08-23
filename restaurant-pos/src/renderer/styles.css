@@ -93,6 +93,19 @@ h1, h2, h3, .heading-font { font-family: 'Poppins', Arial, sans-serif; }
 .cat-tab:active { transform: scale(0.98); }
 .cat-tab.active { background: var(--marigold); color: #fff; border-color: var(--marigold); box-shadow: 0 6px 14px rgba(255, 138, 0, 0.35); }
 
+.cat-tab-offer {
+  font-size: 16px;
+  font-weight: 800;
+  padding: 18px 16px;
+  background: linear-gradient(135deg, #FF3B3B, #FF8A00);
+  color: #fff;
+  border-color: transparent;
+  box-shadow: 0 6px 16px rgba(255, 59, 59, 0.35);
+}
+
+.cat-tab-offer:hover { filter: brightness(1.05); background: linear-gradient(135deg, #FF3B3B, #FF8A00); }
+.cat-tab-offer.active { background: linear-gradient(135deg, #FF3B3B, #FF8A00); border-color: transparent; box-shadow: 0 8px 20px rgba(255, 59, 59, 0.45); }
+
 .main-panel {
   flex: 1;
   display: flex;
@@ -169,6 +182,35 @@ h1, h2, h3, .heading-font { font-family: 'Poppins', Arial, sans-serif; }
 
 .delete-item-btn:hover { background: #fbe0dd; }
 
+.recipe-item-btn {
+  position: absolute;
+  top: 10px;
+  left: 10px;
+  border-radius: var(--tag);
+  border: none;
+  background: #eef1fb;
+  color: #3b4b9e;
+  font-size: 10.5px;
+  font-weight: 700;
+  padding: 3px 8px;
+  cursor: pointer;
+}
+
+.recipe-item-btn:hover { background: #e0e5f9; }
+
+.recipe-row {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 10px;
+  padding: 6px 0;
+  border-bottom: 1px solid #f2ecdd;
+}
+
+.recipe-row-name { font-size: 13px; color: var(--dark); }
+.recipe-row-unit { color: #9a9488; font-size: 11px; }
+.recipe-row-input { width: 90px; margin-bottom: 0 !important; }
+
 .item-card:hover { box-shadow: 0 8px 20px rgba(43, 43, 43, 0.1); border-color: var(--marigold-soft); transform: translateY(-2px); }
 .item-card:active { transform: scale(0.98); }
 
@@ -177,6 +219,7 @@ h1, h2, h3, .heading-font { font-family: 'Poppins', Arial, sans-serif; }
   font-size: 15.5px;
   font-weight: 700;
   margin-bottom: 4px;
+  margin-top: 18px;
   padding-right: 22px;
 }
 
@@ -194,6 +237,48 @@ h1, h2, h3, .heading-font { font-family: 'Poppins', Arial, sans-serif; }
 }
 
 .empty-state { color: #8a8378; font-size: 15px; padding: 12px 0; }
+
+.size-options {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 6px;
+  margin-bottom: 10px;
+}
+
+.size-btn {
+  border: 1.5px solid var(--border);
+  background: var(--cream);
+  color: var(--dark);
+  border-radius: 8px;
+  padding: 5px 10px;
+  font-size: 12px;
+  font-weight: 700;
+  cursor: pointer;
+}
+
+.size-btn:hover { background: var(--marigold-soft); }
+.size-btn.active { background: var(--marigold); border-color: var(--marigold); color: #fff; }
+
+.item-card-footer {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 8px;
+}
+
+.add-btn {
+  border: none;
+  background: var(--marigold);
+  color: #fff;
+  border-radius: 10px;
+  padding: 7px 14px;
+  font-size: 12.5px;
+  font-weight: 700;
+  cursor: pointer;
+}
+
+.add-btn:hover { filter: brightness(1.05); }
+.add-btn:active { transform: scale(0.96); }
 
 .cart-panel {
   width: 330px;
@@ -461,6 +546,26 @@ h1, h2, h3, .heading-font { font-family: 'Poppins', Arial, sans-serif; }
 .payment-btn:hover { background: #f2ecdd; }
 .payment-btn.active { background: var(--plum); border-color: var(--plum); color: #fff; }
 
+.payment-section .modal-input { margin-bottom: 10px; }
+.payment-section .modal-input:last-child { margin-bottom: 0; }
+
+.checkout-note {
+  width: 100%;
+  min-height: 70px;
+  resize: vertical;
+  font-family: 'Poppins', Arial, sans-serif;
+}
+
+.receipt-note {
+  font-size: 13px;
+  padding: 6px 0;
+}
+
+.receipt-status-pending span:last-child {
+  font-weight: 700;
+  text-decoration: underline;
+}
+
 .checkout-actions {
   display: flex;
   gap: 12px;
@@ -511,6 +616,7 @@ h1, h2, h3, .heading-font { font-family: 'Poppins', Arial, sans-serif; }
 
 .receipt-paper {
   width: 302px;
+  box-sizing: border-box;
   background: #fff;
   color: var(--dark);
   font-family: 'Courier New', Courier, monospace;
@@ -567,10 +673,10 @@ h1, h2, h3, .heading-font { font-family: 'Poppins', Arial, sans-serif; }
   margin-bottom: 3px;
 }
 
-.col-name { flex: 1; padding-right: 4px; word-break: break-word; }
-.col-qty { width: 26px; text-align: right; }
-.col-price { width: 46px; text-align: right; }
-.col-total { width: 52px; text-align: right; }
+.col-name { flex: 1; min-width: 0; padding-right: 4px; word-break: break-word; }
+.col-qty { width: 28px; text-align: right; flex-shrink: 0; }
+.col-price { width: 52px; text-align: right; flex-shrink: 0; }
+.col-total { width: 58px; text-align: right; flex-shrink: 0; }
 
 .receipt-total-row {
   justify-content: space-between;
@@ -783,14 +889,54 @@ h1, h2, h3, .heading-font { font-family: 'Poppins', Arial, sans-serif; }
 }
 
 @media print {
+  @page {
+    size: 80mm auto;
+    margin: 0;
+  }
+  html, body { width: 80mm; margin: 0; padding: 0; }
   body * { visibility: hidden; }
   .receipt-paper, .receipt-paper * { visibility: visible; }
   .receipt-paper {
     position: absolute;
     top: 0;
     left: 0;
+    box-sizing: border-box;
     width: 80mm;
+    max-width: 80mm;
+    padding: 2mm 3mm;
     box-shadow: none;
+    border-top: none;
+    color: #000 !important;
+    background: #fff !important;
+    font-size: 13px;
+  }
+  .receipt-row { font-size: 12.5px; }
+  .col-qty { width: 28px; }
+  .col-price { width: 52px; }
+  .col-total { width: 58px; }
+  .receipt-restaurant,
+  .receipt-meta,
+  .receipt-row,
+  .receipt-thankyou,
+  .receipt-dev-contact,
+  .receipt-note {
+    color: #000 !important;
+    opacity: 1 !important;
+  }
+  .receipt-logo {
+    filter: grayscale(1) contrast(1.6);
+  }
+  .receipt-dev-contact {
+    text-align: center;
+    width: 100%;
+    font-size: 9.5px;
+    white-space: normal;
+    word-break: break-word;
+  }
+  .receipt-thankyou,
+  .receipt-dev-contact {
+    page-break-inside: avoid;
+    break-inside: avoid;
   }
   .no-print { display: none !important; }
 }

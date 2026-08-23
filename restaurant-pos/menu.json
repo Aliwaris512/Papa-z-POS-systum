@@ -151,6 +151,10 @@
         { "name": "Family Deal 2", "price": 3850, "description": "1 Large Pizza Tikka, 1 Special Sandwich, 10 Hot Wings, Family Fries, Full Paista + 1.5 Ltr Drink" },
         { "name": "Family Deal 3", "price": 4900, "description": "2 Medium Pizza, 1 Pizza Burger, 2 Piece Cheese Roll, 1 Chicken Wrap, Family Fries, 2 Drink 1.5 Ltr" }
       ]
+    },
+    {
+      "name": "Big Offers",
+      "items": []
     }
   ]
 }

@@ -106,6 +106,16 @@ h1, h2, h3, .heading-font { font-family: 'Poppins', Arial, sans-serif; }
 .cat-tab-offer:hover { filter: brightness(1.05); background: linear-gradient(135deg, #FF3B3B, #FF8A00); }
 .cat-tab-offer.active { background: linear-gradient(135deg, #FF3B3B, #FF8A00); border-color: transparent; box-shadow: 0 8px 20px rgba(255, 59, 59, 0.45); }
 
+.cat-tab-add {
+  background: transparent;
+  color: var(--plum);
+  border: 1.5px dashed var(--plum);
+  text-align: center;
+  margin-top: 4px;
+}
+
+.cat-tab-add:hover { background: var(--marigold-soft); }
+
 .main-panel {
   flex: 1;
   display: flex;
@@ -642,11 +652,22 @@ h1, h2, h3, .heading-font { font-family: 'Poppins', Arial, sans-serif; }
   margin-bottom: 6px;
 }
 
+.receipt-shop-contact {
+  text-align: center;
+  font-size: 11px;
+  font-weight: 700;
+  margin-bottom: 6px;
+}
+
 .receipt-meta {
   text-align: center;
   font-size: 11.5px;
   line-height: 1.5;
   margin-bottom: 8px;
+}
+
+.receipt-customer-info {
+  font-weight: 700;
 }
 
 .receipt-divider {
@@ -701,6 +722,7 @@ h1, h2, h3, .heading-font { font-family: 'Poppins', Arial, sans-serif; }
 .receipt-dev-contact {
   text-align: center;
   font-size: 10px;
+  font-weight: 700;
   margin-top: 8px;
   color: var(--dark);
   opacity: 0.7;
@@ -802,7 +824,7 @@ h1, h2, h3, .heading-font { font-family: 'Poppins', Arial, sans-serif; }
 
 .history-row {
   display: grid;
-  grid-template-columns: 90px 1fr 110px 90px 90px;
+  grid-template-columns: 90px 1fr 110px 90px 90px 140px;
   align-items: center;
   padding: 12px 14px;
   border-radius: var(--tag);
@@ -828,9 +850,23 @@ h1, h2, h3, .heading-font { font-family: 'Poppins', Arial, sans-serif; }
 .history-row-item.low-stock { background: #fdeceb; border-color: #e5b3ad; }
 .history-row-item.low-stock:hover { background: #fbe0dd; }
 .hc-total { color: var(--chili); font-weight: 700; }
-.hc-actions { text-align: right; }
+.hc-actions { text-align: right; display: flex; gap: 6px; justify-content: flex-end; }
 
-.delete-order-btn {
+.status-badge {
+  display: inline-block;
+  padding: 3px 10px;
+  border-radius: 999px;
+  font-size: 11px;
+  font-weight: 700;
+  text-transform: uppercase;
+  letter-spacing: 0.3px;
+}
+
+.status-paid { background: #e2f3e5; color: #2e7d32; }
+.status-pending { background: #fdecea; color: #c0392b; }
+
+.delete-order-btn,
+.edit-order-btn {
   background: var(--chili, #c0392b);
   color: #fff;
   border: none;
@@ -841,7 +877,9 @@ h1, h2, h3, .heading-font { font-family: 'Poppins', Arial, sans-serif; }
   cursor: pointer;
 }
 
-.delete-order-btn:hover { opacity: 0.85; }
+.edit-order-btn { background: var(--plum); }
+
+.delete-order-btn:hover, .edit-order-btn:hover { opacity: 0.85; }
 
 .range-bar {
   display: flex;
@@ -890,10 +928,10 @@ h1, h2, h3, .heading-font { font-family: 'Poppins', Arial, sans-serif; }
 
 @media print {
   @page {
-    size: 80mm auto;
+    size: 72mm auto;
     margin: 0;
   }
-  html, body { width: 80mm; margin: 0; padding: 0; }
+  html, body { width: 72mm; margin: 0; padding: 0; }
   body * { visibility: hidden; }
   .receipt-paper, .receipt-paper * { visibility: visible; }
   .receipt-paper {
@@ -901,19 +939,30 @@ h1, h2, h3, .heading-font { font-family: 'Poppins', Arial, sans-serif; }
     top: 0;
     left: 0;
     box-sizing: border-box;
-    width: 80mm;
-    max-width: 80mm;
-    padding: 2mm 3mm;
+    width: 72mm;
+    max-width: 72mm;
+    padding: 1mm 2mm;
     box-shadow: none;
     border-top: none;
     color: #000 !important;
     background: #fff !important;
-    font-size: 13px;
+    font-size: 12px;
   }
-  .receipt-row { font-size: 12.5px; }
-  .col-qty { width: 28px; }
-  .col-price { width: 52px; }
-  .col-total { width: 58px; }
+  .receipt-row { font-size: 11.5px; }
+  .col-qty { width: 22px; }
+  .col-price { width: 42px; }
+  .col-total { width: 46px; }
+  .receipt-row:not(.receipt-col-head):not(.receipt-total-row) span:first-child,
+  .receipt-total-row span:first-child {
+    flex-shrink: 1;
+    min-width: 0;
+  }
+  .receipt-row:not(.receipt-col-head):not(.receipt-total-row) span:last-child,
+  .receipt-total-row span:last-child {
+    flex-shrink: 0;
+    padding-left: 6px;
+    white-space: nowrap;
+  }
   .receipt-restaurant,
   .receipt-meta,
   .receipt-row,
@@ -930,6 +979,7 @@ h1, h2, h3, .heading-font { font-family: 'Poppins', Arial, sans-serif; }
     text-align: center;
     width: 100%;
     font-size: 9.5px;
+    font-weight: 700;
     white-space: normal;
     word-break: break-word;
   }

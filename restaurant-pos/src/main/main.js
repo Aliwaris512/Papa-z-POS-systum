@@ -103,6 +103,19 @@ app.whenReady().then(() => {
     return db.prepare('SELECT * FROM items WHERE category_id = ? ORDER BY id').all(categoryId);
   });
 
+  ipcMain.handle('menu:addCategory', (_event, name) => {
+    const trimmed = (name || '').trim();
+    if (!trimmed) throw new Error('Section name required');
+    const existing = db.prepare('SELECT id FROM categories WHERE name = ?').get(trimmed);
+    if (existing) throw new Error('A section with this name already exists');
+    const maxOrder = db.prepare('SELECT MAX(sort_order) AS m FROM categories').get().m || 0;
+    const result = db
+      .prepare('INSERT INTO categories (name, sort_order) VALUES (?, ?)')
+      .run(trimmed, maxOrder + 1);
+    backupDb();
+    return db.prepare('SELECT * FROM categories WHERE id = ?').get(result.lastInsertRowid);
+  });
+
   ipcMain.handle('orders:save', (_event, { items, total, paymentMethod, paymentStatus, orderType, note, customerPhone, customerAddress }) => {
     const timestamp = new Date().toISOString();
     const status = paymentStatus || 'Paid';
@@ -176,13 +189,42 @@ app.whenReady().then(() => {
     return { saved: true };
   });
 
-  ipcMain.handle('app:printReceipt', (event) => {
+  ipcMain.handle('app:getPrinters', async (event) => {
     const win = BrowserWindow.fromWebContents(event.sender);
-    win.webContents.print({
-      silent: false,
-      printBackground: true,
-      margins: { marginType: 'none' },
-      pageSize: { width: 80000, height: 297000 }
+    return win.webContents.getPrintersAsync();
+  });
+
+  ipcMain.handle('app:printReceipt', async (event, heightMm) => {
+    const win = BrowserWindow.fromWebContents(event.sender);
+    const height = Math.max(60, Math.min(heightMm || 200, 1200));
+
+    const printers = await win.webContents.getPrintersAsync();
+    const bixolon = printers.find((p) => /bixolon/i.test(p.name) && /qe302/i.test(p.name))
+      || printers.find((p) => /bixolon/i.test(p.name));
+
+    if (!bixolon) {
+      return {
+        success: false,
+        error: `BIXOLON SRP-QE302 not found. Detected printers: ${printers.map((p) => p.name).join(', ') || 'none'}. Check it is installed, powered on, and set up in Windows.`
+      };
+    }
+
+    return new Promise((resolve) => {
+      win.webContents.print({
+        silent: true,
+        deviceName: bixolon.name,
+        printBackground: true,
+        margins: { marginType: 'none' },
+        scaleFactor: 100,
+        pageSize: { width: 72000, height: Math.round(height * 1000) }
+      }, (success, errorType) => {
+        if (!success) {
+          console.error('Print failed:', errorType);
+          resolve({ success: false, error: `Print failed: ${errorType}` });
+        } else {
+          resolve({ success: true });
+        }
+      });
     });
   });
 
@@ -198,6 +240,16 @@ app.whenReady().then(() => {
     db.prepare('DELETE FROM orders WHERE order_id = ?').run(orderId);
     backupDb();
     return { deleted: true };
+  });
+
+  ipcMain.handle('orders:update', (_event, payload) => {
+    const { orderId, paymentMethod, paymentStatus, orderType, note, customerPhone, customerAddress } = payload;
+    db.prepare(
+      `UPDATE orders SET payment_method = ?, payment_status = ?, order_type = ?, note = ?, customer_phone = ?, customer_address = ?
+       WHERE order_id = ?`
+    ).run(paymentMethod, paymentStatus, orderType, note || null, customerPhone || null, customerAddress || null, orderId);
+    backupDb();
+    return { updated: true };
   });
 
   ipcMain.handle('orders:exportCsv', async (event, range) => {

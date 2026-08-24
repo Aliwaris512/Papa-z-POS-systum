@@ -1,6 +1,6 @@
 const { useState, useEffect } = React;
 
-function Sidebar({ categories, selectedId, onSelect }) {
+function Sidebar({ categories, selectedId, onSelect, onAddSection }) {
   return (
     <div className="sidebar">
       {categories.map((cat) => (
@@ -16,6 +16,50 @@ function Sidebar({ categories, selectedId, onSelect }) {
           {cat.name === 'Big Offers' ? '🔥 Big Offers' : cat.name}
         </button>
       ))}
+      <button className="cat-tab cat-tab-add" onClick={onAddSection}>+ Add Section</button>
+    </div>
+  );
+}
+
+function AddSectionModal({ onClose, onSave }) {
+  const [name, setName] = useState('');
+  const [error, setError] = useState('');
+
+  async function handleSave() {
+    const trimmed = name.trim();
+    if (!trimmed) {
+      setError('Enter section name.');
+      return;
+    }
+    try {
+      await onSave(trimmed);
+    } catch (err) {
+      setError(err.message || 'Could not add section.');
+    }
+  }
+
+  return (
+    <div className="modal-overlay" onClick={onClose}>
+      <div className="modal-card" onClick={(e) => e.stopPropagation()}>
+        <div className="modal-header">Add Section</div>
+        <div className="modal-body">
+          <label className="modal-label">Section Name</label>
+          <input
+            type="text"
+            className="modal-input"
+            value={name}
+            onChange={(e) => setName(e.target.value)}
+            placeholder="e.g. Wraps, Shawarma"
+            autoFocus
+            onKeyDown={(e) => { if (e.key === 'Enter') handleSave(); }}
+          />
+          {error && <div className="modal-error">{error}</div>}
+        </div>
+        <div className="modal-actions">
+          <button className="back-btn" onClick={onClose}>Cancel</button>
+          <button className="confirm-btn" onClick={handleSave}>Done</button>
+        </div>
+      </div>
     </div>
   );
 }
@@ -459,12 +503,23 @@ function ReceiptView({ order, onNewOrder, fromHistory, onBackToHistory }) {
   const dt = new Date(order.timestamp);
   const dateStr = dt.toLocaleDateString();
   const timeStr = dt.toLocaleTimeString();
+  const paperRef = React.useRef(null);
+
+  const handlePrint = async () => {
+    const el = paperRef.current;
+    const heightMm = el ? (el.scrollHeight / 96) * 25.4 + 10 : null;
+    const result = await window.api.printReceipt(heightMm);
+    if (result && result.success === false) {
+      alert(result.error);
+    }
+  };
 
   return (
     <div className="receipt-screen">
-      <div className="receipt-paper">
+      <div className="receipt-paper" ref={paperRef}>
         <img src={LOGO_PATH} alt="logo" className="receipt-logo" />
         <div className="receipt-restaurant">{RESTAURANT_NAME}</div>
+        <div className="receipt-shop-contact">0326-1231238 / 0318-4533774</div>
         <div className="receipt-meta">
           <div>Order #{order.orderId}</div>
           <div>{dateStr} {timeStr}</div>
@@ -473,7 +528,7 @@ function ReceiptView({ order, onNewOrder, fromHistory, onBackToHistory }) {
         {order.orderType === 'Delivery' && (order.customerPhone || order.customerAddress) && (
           <>
             <div className="receipt-divider" />
-            <div className="receipt-meta">
+            <div className="receipt-meta receipt-customer-info">
               {order.customerPhone && <div>Phone: {order.customerPhone}</div>}
               {order.customerAddress && <div>Address: {order.customerAddress}</div>}
             </div>
@@ -523,7 +578,7 @@ function ReceiptView({ order, onNewOrder, fromHistory, onBackToHistory }) {
       </div>
 
       <div className="receipt-actions no-print">
-        <button className="print-btn" onClick={() => window.api.printReceipt()}>
+        <button className="print-btn" onClick={handlePrint}>
           Print Receipt
         </button>
         {fromHistory ? (
@@ -568,10 +623,127 @@ function rangeBounds(preset) {
   return { from, to };
 }
 
-function HistoryView({ orders, onSelectOrder, onExport, onDelete, onBack, exportMsg }) {
+function EditOrderModal({ order, onClose, onSave }) {
+  const [paymentMethod, setPaymentMethod] = useState(order.payment_method);
+  const [paymentStatus, setPaymentStatus] = useState(order.payment_status);
+  const [orderType, setOrderType] = useState(order.order_type);
+  const [note, setNote] = useState(order.note || '');
+  const [customerPhone, setCustomerPhone] = useState(order.customer_phone || '');
+  const [customerAddress, setCustomerAddress] = useState(order.customer_address || '');
+
+  const canSave = paymentMethod && paymentStatus && (orderType !== 'Delivery' || (customerPhone.trim() && customerAddress.trim()));
+
+  function handleSave() {
+    onSave({
+      orderId: order.order_id,
+      paymentMethod,
+      paymentStatus,
+      orderType,
+      note: note.trim(),
+      customerPhone: orderType === 'Delivery' ? customerPhone.trim() : '',
+      customerAddress: orderType === 'Delivery' ? customerAddress.trim() : ''
+    });
+  }
+
+  return (
+    <div className="modal-overlay" onClick={onClose}>
+      <div className="modal-card" onClick={(e) => e.stopPropagation()}>
+        <div className="modal-header">Edit Order #{order.order_id}</div>
+        <div className="modal-body">
+          <div className="payment-section">
+            <div className="payment-label">Order Type</div>
+            <div className="payment-options">
+              {['Dine-in', 'Takeaway', 'Delivery'].map((t) => (
+                <button
+                  key={t}
+                  className={"payment-btn" + (orderType === t ? ' active' : '')}
+                  onClick={() => setOrderType(t)}
+                >
+                  {t}
+                </button>
+              ))}
+            </div>
+          </div>
+
+          {orderType === 'Delivery' && (
+            <div className="payment-section">
+              <div className="payment-label">Delivery Details</div>
+              <input
+                type="text"
+                className="modal-input"
+                placeholder="Customer phone number"
+                value={customerPhone}
+                onChange={(e) => setCustomerPhone(e.target.value)}
+              />
+              <input
+                type="text"
+                className="modal-input"
+                placeholder="Delivery address"
+                value={customerAddress}
+                onChange={(e) => setCustomerAddress(e.target.value)}
+              />
+            </div>
+          )}
+
+          <div className="payment-section">
+            <div className="payment-label">Note (optional)</div>
+            <textarea
+              className="modal-input checkout-note"
+              value={note}
+              onChange={(e) => setNote(e.target.value)}
+            />
+          </div>
+
+          <div className="payment-section">
+            <div className="payment-label">Payment Method</div>
+            <div className="payment-options">
+              <button
+                className={"payment-btn" + (paymentMethod === 'Cash' ? ' active' : '')}
+                onClick={() => setPaymentMethod('Cash')}
+              >
+                Cash
+              </button>
+              <button
+                className={"payment-btn" + (paymentMethod === 'Card' ? ' active' : '')}
+                onClick={() => setPaymentMethod('Card')}
+              >
+                Card
+              </button>
+            </div>
+          </div>
+
+          <div className="payment-section">
+            <div className="payment-label">Bill Status</div>
+            <div className="payment-options">
+              <button
+                className={"payment-btn" + (paymentStatus === 'Paid' ? ' active' : '')}
+                onClick={() => setPaymentStatus('Paid')}
+              >
+                Paid
+              </button>
+              <button
+                className={"payment-btn" + (paymentStatus === 'Pending' ? ' active' : '')}
+                onClick={() => setPaymentStatus('Pending')}
+              >
+                Pending
+              </button>
+            </div>
+          </div>
+        </div>
+        <div className="modal-actions">
+          <button className="back-btn" onClick={onClose}>Cancel</button>
+          <button className="confirm-btn" disabled={!canSave} onClick={handleSave}>Save Changes</button>
+        </div>
+      </div>
+    </div>
+  );
+}
+
+function HistoryView({ orders, onSelectOrder, onExport, onDelete, onEdit, onBack, exportMsg }) {
   const [preset, setPreset] = useState('all');
   const [customFrom, setCustomFrom] = useState('');
   const [customTo, setCustomTo] = useState('');
+  const [statusFilter, setStatusFilter] = useState('all');
 
   let bounds = null;
   if (preset === 'custom') {
@@ -585,12 +757,16 @@ function HistoryView({ orders, onSelectOrder, onExport, onDelete, onBack, export
     bounds = rangeBounds(preset);
   }
 
-  const filteredOrders = bounds
+  let filteredOrders = bounds
     ? orders.filter((o) => {
         const t = new Date(o.timestamp);
         return t >= bounds.from && t < bounds.to;
       })
     : orders;
+
+  if (statusFilter !== 'all') {
+    filteredOrders = filteredOrders.filter((o) => o.payment_status === statusFilter);
+  }
 
   const filteredTotal = filteredOrders.reduce((sum, o) => sum + o.total, 0);
 
@@ -640,6 +816,18 @@ function HistoryView({ orders, onSelectOrder, onExport, onDelete, onBack, export
           )}
         </div>
 
+        <div className="range-bar">
+          {['all', 'Paid', 'Pending'].map((s) => (
+            <button
+              key={s}
+              className={"range-btn" + (statusFilter === s ? ' active' : '')}
+              onClick={() => setStatusFilter(s)}
+            >
+              {s === 'all' ? 'All Bills' : s}
+            </button>
+          ))}
+        </div>
+
         {exportMsg && <div className="export-msg">{exportMsg}</div>}
 
         <div className="history-summary">
@@ -652,6 +840,7 @@ function HistoryView({ orders, onSelectOrder, onExport, onDelete, onBack, export
             <span className="hc-date">Date / Time</span>
             <span className="hc-total">Total</span>
             <span className="hc-pay">Payment</span>
+            <span className="hc-status">Status</span>
             <span className="hc-actions"></span>
           </div>
           {filteredOrders.length === 0 && <div className="empty-state">No orders in this range.</div>}
@@ -663,7 +852,18 @@ function HistoryView({ orders, onSelectOrder, onExport, onDelete, onBack, export
                 <span className="hc-date">{dt.toLocaleDateString()} {dt.toLocaleTimeString()}</span>
                 <span className="hc-total">Rs. {o.total}</span>
                 <span className="hc-pay">{o.payment_method}</span>
+                <span className="hc-status">
+                  <span className={"status-badge " + (o.payment_status === 'Pending' ? 'status-pending' : 'status-paid')}>
+                    {o.payment_status}
+                  </span>
+                </span>
                 <span className="hc-actions">
+                  <button
+                    className="edit-order-btn"
+                    onClick={(e) => { e.stopPropagation(); onEdit(o); }}
+                  >
+                    Edit
+                  </button>
                   <button
                     className="delete-order-btn"
                     onClick={(e) => { e.stopPropagation(); onDelete(o.order_id); }}
@@ -905,6 +1105,8 @@ function App() {
   const [editingInventoryItem, setEditingInventoryItem] = useState(null);
   const [inventoryExportMsg, setInventoryExportMsg] = useState('');
   const [pendingDelete, setPendingDelete] = useState(null);
+  const [editingOrderRow, setEditingOrderRow] = useState(null);
+  const [showAddSection, setShowAddSection] = useState(false);
   const [recipeItem, setRecipeItem] = useState(null);
   const [recipeRows, setRecipeRows] = useState([]);
   const [lowStockAlert, setLowStockAlert] = useState([]);
@@ -1015,6 +1217,14 @@ function App() {
     setRecipeItem(null);
   }
 
+  async function saveNewSection(name) {
+    const cat = await window.api.addCategory(name);
+    const rows = await window.api.getCategories();
+    setCategories(rows);
+    setSelectedId(cat.id);
+    setShowAddSection(false);
+  }
+
   async function saveNewItem({ name, price, categoryId }) {
     await window.api.addItem({ name, price, categoryId });
     if (categoryId === selectedId) {
@@ -1060,6 +1270,19 @@ function App() {
       setOrders(rows);
       window.api.getInventory().then(setInventory);
     });
+  }
+
+  function editOrder(order) {
+    requestAdminDelete(`Enter admin password to edit order #${order.order_id}.`, () => {
+      setEditingOrderRow(order);
+    });
+  }
+
+  async function saveEditedOrder(payload) {
+    await window.api.updateOrder(payload);
+    const rows = await window.api.getOrders();
+    setOrders(rows);
+    setEditingOrderRow(null);
   }
 
   async function openInventory() {
@@ -1137,6 +1360,7 @@ function App() {
         onSelectOrder={selectHistoryOrder}
         onExport={exportCsv}
         onDelete={deleteOrder}
+        onEdit={editOrder}
         onBack={() => setView('menu')}
         exportMsg={exportMsg}
       />
@@ -1165,7 +1389,7 @@ function App() {
   } else {
     content = (
       <div className="app">
-        <Sidebar categories={categories} selectedId={selectedId} onSelect={setSelectedId} />
+        <Sidebar categories={categories} selectedId={selectedId} onSelect={setSelectedId} onAddSection={() => setShowAddSection(true)} />
         <div className="main-panel">
           <div className="panel-header">
             <span>{selectedCategory ? selectedCategory.name : ''}</span>
@@ -1216,6 +1440,19 @@ function App() {
             pendingDelete.action();
             setPendingDelete(null);
           }}
+        />
+      )}
+      {showAddSection && (
+        <AddSectionModal
+          onClose={() => setShowAddSection(false)}
+          onSave={saveNewSection}
+        />
+      )}
+      {editingOrderRow && (
+        <EditOrderModal
+          order={editingOrderRow}
+          onClose={() => setEditingOrderRow(null)}
+          onSave={saveEditedOrder}
         />
       )}
       {recipeItem && (

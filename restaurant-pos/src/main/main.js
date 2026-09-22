@@ -12,37 +12,209 @@ function csvEscape(value) {
 let db;
 let mainWindow;
 
-function applyInventoryDelta(lineItems, direction) {
-  const getRecipe = db.prepare('SELECT ingredient_id, qty_per_unit FROM recipes WHERE item_id = ?');
-  const updateQty = db.prepare('UPDATE inventory SET current_qty = current_qty + ? WHERE id = ?');
-  const lowStock = [];
+function normalizeNumber(value) {
+  const num = Number(value);
+  return Number.isFinite(num) ? num : 0;
+}
 
-  lineItems.forEach((line) => {
-    if (!line.menuItemId) return;
+function getInventoryStatus(item) {
+  if (!item) return 'OK';
+  return item.current_qty <= item.reorder_level ? 'LOW STOCK' : 'OK';
+}
+
+function findDefaultIngredientForItemName(itemName) {
+  const name = (itemName || '').toLowerCase();
+  const inventory = db.prepare('SELECT * FROM inventory ORDER BY name').all();
+
+  const matchesAny = (keywords) => {
+    const keyList = keywords.map((word) => word.toLowerCase());
+    return inventory.find((row) => {
+      const rowName = (row.name || '').toLowerCase();
+      return keyList.some((word) => rowName.includes(word));
+    });
+  };
+
+  if (/burger|burger's|burgers/.test(name)) {
+    return matchesAny(['burger bun', 'bun', 'burger bread']) || matchesAny(['bread']) || null;
+  }
+
+  if (/shawarma/.test(name)) {
+    return matchesAny(['shawarma bread', 'shawarma', 'bread']) || matchesAny(['bread']) || null;
+  }
+
+  if (/wrap/.test(name)) {
+    return matchesAny(['tortilla wrap', 'wrap bread', 'wrap', 'tortilla', 'bread']) || matchesAny(['bread']) || null;
+  }
+
+  if (/water/.test(name)) {
+    if (/small|300ml/.test(name)) return matchesAny(['300ml', 'small water bottle', 'water bottle', 'water']) || matchesAny(['water']) || null;
+    if (/large|500ml|1.5|1.5 litre|liter/.test(name)) return matchesAny(['500ml', '1.5 litre', 'large water bottle', 'water bottle', 'water']) || matchesAny(['water']) || null;
+    return matchesAny(['water bottle', 'water']) || matchesAny(['water']) || null;
+  }
+
+  if (/drink|soft drink/.test(name)) {
+    if (/small|300ml/.test(name)) return matchesAny(['300ml', 'small drink bottle', 'drink bottle', 'soft drink', 'drink']) || matchesAny(['drink']) || null;
+    if (/large|500ml|1.5|1.5 litre|liter/.test(name)) return matchesAny(['500ml', '1.5 litre', 'large drink bottle', 'drink bottle', 'soft drink', 'drink']) || matchesAny(['drink']) || null;
+    return matchesAny(['drink bottle', 'soft drink', 'drink']) || matchesAny(['drink']) || null;
+  }
+
+  if (/pizza|roll|sandwich|fries|deal|platter|appetizer|appetisers|special/.test(name)) {
+    return matchesAny(['bread', 'bun', 'packet', 'pcs']) || null;
+  }
+
+  return matchesAny(['bread', 'bun', 'packet', 'pcs']) || null;
+}
+
+function ensureDefaultInventoryIngredient(name, defaults = { unit: 'Pcs', conversionQty: 1 }) {
+  const normalized = (name || '').trim();
+  if (!normalized) return null;
+
+  const existing = db.prepare('SELECT * FROM inventory WHERE LOWER(name) = LOWER(?)').get(normalized);
+  if (existing) return existing;
+
+  const categoryMatch = db.prepare('SELECT id FROM inventory_categories WHERE LOWER(name) LIKE LOWER(?)').get(`${normalized}%`);
+  const categoryId = categoryMatch ? categoryMatch.id : null;
+  const result = db.prepare(
+    'INSERT INTO inventory (name, category_id, unit, current_qty, reorder_level, unit_cost, conversion_qty) VALUES (?, ?, ?, ?, ?, ?, ?)'
+  ).run(normalized, categoryId, defaults.unit || 'Pcs', 0, 0, 0, defaults.conversionQty ?? 1);
+
+  return db.prepare('SELECT * FROM inventory WHERE id = ?').get(result.lastInsertRowid);
+}
+
+function getDefaultBeverageIngredientName(itemName) {
+  const name = (itemName || '').toLowerCase();
+  if (/small|300ml/.test(name)) return 'Drink Bottle 300ml';
+  if (/large|500ml|1.5|1.5 litre|liter/.test(name)) return 'Drink Bottle 1.5 Litre';
+  return 'Drink Bottle 300ml';
+}
+
+function ensureDefaultRecipeForItem(itemId, itemName) {
+  if (!itemId) return;
+  const existing = db.prepare('SELECT COUNT(*) AS c FROM recipes WHERE item_id = ?').get(itemId).c;
+  if (existing > 0) return;
+
+  const lowerName = (itemName || '').toLowerCase();
+  let ingredient = null;
+
+  if (/burger|burger's|burgers/.test(lowerName)) {
+    ingredient = findDefaultIngredientForItemName(itemName) || ensureDefaultInventoryIngredient('Burger Bun', { unit: 'Packet', conversionQty: 4 });
+  } else if (/shawarma/.test(lowerName)) {
+    ingredient = findDefaultIngredientForItemName(itemName) || ensureDefaultInventoryIngredient('Shawarma Bread', { unit: 'Packet', conversionQty: 4 });
+  } else if (/wrap/.test(lowerName)) {
+    ingredient = findDefaultIngredientForItemName(itemName) || ensureDefaultInventoryIngredient('Tortilla Wrap', { unit: 'Packet', conversionQty: 8 });
+  } else if (/water/.test(lowerName)) {
+    ingredient = findDefaultIngredientForItemName(itemName) || ensureDefaultInventoryIngredient(/small|300ml/.test(lowerName) ? 'Water Bottle 300ml' : 'Water Bottle 1.5 Litre', { unit: 'Bottle', conversionQty: 1 });
+  } else if (/drink|soft drink/.test(lowerName)) {
+    ingredient = findDefaultIngredientForItemName(itemName) || ensureDefaultInventoryIngredient(getDefaultBeverageIngredientName(itemName), { unit: 'Bottle', conversionQty: 1 });
+  }
+
+  if (!ingredient) return;
+
+  db.prepare('INSERT INTO recipes (item_id, ingredient_id, qty_per_unit) VALUES (?, ?, ?)')
+    .run(itemId, ingredient.id, 1);
+}
+
+function getRequiredIngredientQty(ingredient, recipeQty, orderQty) {
+  const recipeUnits = normalizeNumber(recipeQty) * normalizeNumber(orderQty);
+  const conversion = normalizeNumber(ingredient?.conversion_qty || 1);
+  if (conversion > 0 && ingredient && ingredient.unit && /packet/i.test(String(ingredient.unit))) {
+    return recipeUnits / conversion;
+  }
+  return recipeUnits;
+}
+
+function validateInventoryAvailability(lineItems) {
+  const getRecipe = db.prepare('SELECT ingredient_id, qty_per_unit FROM recipes WHERE item_id = ?');
+  const getInventory = db.prepare('SELECT * FROM inventory WHERE id = ?');
+  const issues = [];
+
+  (lineItems || []).forEach((line) => {
+    const qty = normalizeNumber(line.qty);
+    if (!line.menuItemId || qty <= 0) return;
     const recipeRows = getRecipe.all(line.menuItemId);
     recipeRows.forEach((r) => {
-      const delta = direction * r.qty_per_unit * line.qty;
-      updateQty.run(delta, r.ingredient_id);
+      const ingredient = getInventory.get(r.ingredient_id);
+      if (!ingredient) return;
+      const required = getRequiredIngredientQty(ingredient, r.qty_per_unit, qty);
+      if (ingredient.current_qty - required < 0) {
+        issues.push({
+          id: ingredient.id,
+          name: ingredient.name,
+          unit: ingredient.unit,
+          current_qty: ingredient.current_qty,
+          reorder_level: ingredient.reorder_level,
+          required,
+          message: `${ingredient.name}: ${ingredient.current_qty} ${ingredient.unit} available, need ${required} ${ingredient.unit}`
+        });
+      }
     });
   });
 
-  if (direction < 0) {
-    const affectedIds = new Set();
-    lineItems.forEach((line) => {
-      if (!line.menuItemId) return;
-      getRecipe.all(line.menuItemId).forEach((r) => affectedIds.add(r.ingredient_id));
+  return issues;
+}
+
+function addInventoryTransaction(inventoryId, deltaQty, reason, note = null, orderId = null) {
+  if (!inventoryId || deltaQty === 0) return;
+  db.prepare(
+    'INSERT INTO inventory_transactions (inventory_id, order_id, delta_qty, reason, note, created_at) VALUES (?, ?, ?, ?, ?, ?)'
+  ).run(inventoryId, orderId || null, deltaQty, reason, note || null, new Date().toISOString());
+}
+
+function applyInventoryDelta(lineItems, direction, options = {}) {
+  const { orderId = null, reason = 'SALE', note = null } = options;
+  const getRecipe = db.prepare('SELECT ingredient_id, qty_per_unit FROM recipes WHERE item_id = ?');
+  const getInventory = db.prepare('SELECT * FROM inventory WHERE id = ?');
+  const updateQty = db.prepare('UPDATE inventory SET current_qty = current_qty + ? WHERE id = ?');
+  const lowStock = [];
+  const affectedIds = new Set();
+
+  (lineItems || []).forEach((line) => {
+    if (!line.menuItemId) return;
+    const qty = normalizeNumber(line.qty);
+    if (qty <= 0) return;
+    const recipeRows = getRecipe.all(line.menuItemId);
+    recipeRows.forEach((r) => {
+      const ingredientId = r.ingredient_id;
+      const ingredient = getInventory.get(ingredientId);
+      if (!ingredient) return;
+      const delta = direction * getRequiredIngredientQty(ingredient, r.qty_per_unit, qty);
+      if (direction < 0 && ingredient.current_qty + delta < 0) {
+        throw new Error(`Insufficient inventory for ${ingredient.name}.`);
+      }
+      updateQty.run(delta, ingredientId);
+      addInventoryTransaction(ingredientId, delta, reason, note, orderId);
+      affectedIds.add(ingredientId);
     });
-    if (affectedIds.size) {
-      const rows = db
-        .prepare(`SELECT * FROM inventory WHERE id IN (${[...affectedIds].join(',')})`)
-        .all();
-      rows.forEach((row) => {
-        if (row.current_qty <= row.reorder_level) lowStock.push(row);
-      });
-    }
+  });
+
+  if (direction < 0 && affectedIds.size) {
+    const inventoryRows = db
+      .prepare(`SELECT * FROM inventory WHERE id IN (${[...affectedIds].map(() => '?').join(',')})`)
+      .all([...affectedIds]);
+    inventoryRows.forEach((row) => {
+      if (getInventoryStatus(row) === 'LOW STOCK') lowStock.push(row);
+    });
   }
 
   return lowStock;
+}
+
+function normalizeInventoryInput(data = {}) {
+  const normalized = {
+    name: String(data.name || '').trim(),
+    categoryId: data.categoryId === null || data.categoryId === undefined || data.categoryId === '' ? null : Number(data.categoryId),
+    unit: String(data.unit || '').trim(),
+    currentQty: Number.isFinite(Number(data.currentQty)) ? Number(data.currentQty) : 0,
+    reorderLevel: Number.isFinite(Number(data.reorderLevel)) ? Number(data.reorderLevel) : 0,
+    unitCost: Number.isFinite(Number(data.unitCost)) ? Number(data.unitCost) : 0,
+    conversionQty: data.conversionQty === null || data.conversionQty === undefined || data.conversionQty === '' ? null : Number(data.conversionQty)
+  };
+
+  if (normalized.conversionQty !== null && (!Number.isFinite(normalized.conversionQty) || normalized.conversionQty <= 0)) {
+    normalized.conversionQty = null;
+  }
+
+  return normalized;
 }
 
 function getBackupDir() {
@@ -100,7 +272,9 @@ app.whenReady().then(() => {
   });
 
   ipcMain.handle('menu:getItemsByCategory', (_event, categoryId) => {
-    return db.prepare('SELECT * FROM items WHERE category_id = ? ORDER BY id').all(categoryId);
+    const items = db.prepare('SELECT * FROM items WHERE category_id = ? ORDER BY id').all(categoryId);
+    items.forEach((item) => ensureDefaultRecipeForItem(item.id, item.name));
+    return items;
   });
 
   ipcMain.handle('menu:addCategory', (_event, name) => {
@@ -124,7 +298,7 @@ app.whenReady().then(() => {
     let lowStock = [];
     const run = db.transaction(() => {
       const stmt = db.prepare(
-        'INSERT INTO orders (timestamp, items, total, payment_method, payment_status, order_type, note, customer_phone, customer_address, inventory_applied) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?)'
+        'INSERT INTO orders (timestamp, items, total, payment_method, payment_status, order_type, note, customer_phone, customer_address, inventory_applied, inventory_restored) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)'
       );
       const result = stmt.run(
         timestamp,
@@ -136,12 +310,27 @@ app.whenReady().then(() => {
         note || null,
         customerPhone || null,
         customerAddress || null,
-        shouldDeduct ? 1 : 0
+        0,
+        0
       );
+      const orderId = result.lastInsertRowid;
+
       if (shouldDeduct) {
-        lowStock = applyInventoryDelta(items, -1);
+        const shortages = validateInventoryAvailability(items || []);
+        if (shortages.length) {
+          lowStock = shortages.map((it) => ({
+            id: it.id,
+            name: it.name,
+            unit: it.unit,
+            current_qty: it.current_qty,
+            reorder_level: it.reorder_level
+          }));
+          return orderId;
+        }
+        db.prepare('UPDATE orders SET inventory_applied = 1 WHERE order_id = ?').run(orderId);
+        lowStock = applyInventoryDelta(items, -1, { orderId, reason: 'SALE', note: `Order #${orderId}` });
       }
-      return result.lastInsertRowid;
+      return orderId;
     });
 
     const orderId = run();
@@ -154,17 +343,25 @@ app.whenReady().then(() => {
       'INSERT INTO items (name, price, category_id, description) VALUES (?, ?, ?, ?)'
     );
     const result = stmt.run(name, price, categoryId, description || null);
+    ensureDefaultRecipeForItem(result.lastInsertRowid, name);
     backupDb();
     return { id: result.lastInsertRowid, name, price, category_id: categoryId, description: description || null };
   });
 
   ipcMain.handle('menu:deleteItem', (_event, itemId) => {
-    db.prepare('DELETE FROM items WHERE id = ?').run(itemId);
+    db.transaction(() => {
+      db.prepare('DELETE FROM recipes WHERE item_id = ?').run(itemId);
+      db.prepare('DELETE FROM items WHERE id = ?').run(itemId);
+    })();
     backupDb();
     return { deleted: true };
   });
 
   ipcMain.handle('menu:getRecipe', (_event, itemId) => {
+    const item = db.prepare('SELECT name FROM items WHERE id = ?').get(itemId);
+    if (item) {
+      ensureDefaultRecipeForItem(itemId, item.name);
+    }
     return db
       .prepare(
         `SELECT r.ingredient_id, r.qty_per_unit, inv.name, inv.unit
@@ -233,9 +430,10 @@ app.whenReady().then(() => {
   });
 
   ipcMain.handle('orders:delete', (_event, orderId) => {
-    const order = db.prepare('SELECT items, inventory_applied FROM orders WHERE order_id = ?').get(orderId);
-    if (order && order.inventory_applied) {
-      applyInventoryDelta(JSON.parse(order.items), 1);
+    const order = db.prepare('SELECT items, inventory_applied, inventory_restored FROM orders WHERE order_id = ?').get(orderId);
+    if (order && order.inventory_applied && !order.inventory_restored) {
+      applyInventoryDelta(JSON.parse(order.items || '[]'), 1, { orderId, reason: 'CANCELLED', note: `Order #${orderId} deleted` });
+      db.prepare('UPDATE orders SET inventory_restored = 1 WHERE order_id = ?').run(orderId);
     }
     db.prepare('DELETE FROM orders WHERE order_id = ?').run(orderId);
     backupDb();
@@ -244,10 +442,37 @@ app.whenReady().then(() => {
 
   ipcMain.handle('orders:update', (_event, payload) => {
     const { orderId, paymentMethod, paymentStatus, orderType, note, customerPhone, customerAddress } = payload;
-    db.prepare(
-      `UPDATE orders SET payment_method = ?, payment_status = ?, order_type = ?, note = ?, customer_phone = ?, customer_address = ?
-       WHERE order_id = ?`
-    ).run(paymentMethod, paymentStatus, orderType, note || null, customerPhone || null, customerAddress || null, orderId);
+    const order = db.prepare('SELECT * FROM orders WHERE order_id = ?').get(orderId);
+    if (!order) return { updated: false };
+
+    const nextStatus = paymentStatus || order.payment_status;
+    const items = JSON.parse(order.items || '[]');
+
+    db.transaction(() => {
+      if (nextStatus === 'Paid' && !order.inventory_applied) {
+        const shortages = validateInventoryAvailability(items);
+        if (shortages.length) {
+          db.prepare(
+            `UPDATE orders SET payment_method = ?, payment_status = ?, order_type = ?, note = ?, customer_phone = ?, customer_address = ?
+             WHERE order_id = ?`
+          ).run(paymentMethod, nextStatus, orderType, note || null, customerPhone || null, customerAddress || null, orderId);
+          return;
+        }
+        applyInventoryDelta(items, -1, { orderId, reason: 'SALE', note: `Order #${orderId} marked paid` });
+        db.prepare('UPDATE orders SET inventory_applied = 1, inventory_restored = 0 WHERE order_id = ?').run(orderId);
+      }
+
+      if ((nextStatus === 'Refunded' || nextStatus === 'Cancelled') && order.inventory_applied && !order.inventory_restored) {
+        applyInventoryDelta(items, 1, { orderId, reason: 'REFUND', note: `Order #${orderId} ${nextStatus}` });
+        db.prepare('UPDATE orders SET inventory_restored = 1 WHERE order_id = ?').run(orderId);
+      }
+
+      db.prepare(
+        `UPDATE orders SET payment_method = ?, payment_status = ?, order_type = ?, note = ?, customer_phone = ?, customer_address = ?
+         WHERE order_id = ?`
+      ).run(paymentMethod, nextStatus, orderType, note || null, customerPhone || null, customerAddress || null, orderId);
+    })();
+
     backupDb();
     return { updated: true };
   });
@@ -278,29 +503,102 @@ app.whenReady().then(() => {
     return { canceled: false, filePath, count: orders.length };
   });
 
+  ipcMain.handle('inventory:getCategories', () => {
+    return db.prepare('SELECT * FROM inventory_categories ORDER BY sort_order, name').all();
+  });
+
+  ipcMain.handle('inventory:addCategory', (_event, name) => {
+    const trimmed = (name || '').trim();
+    if (!trimmed) throw new Error('Category name required');
+    const existing = db.prepare('SELECT id FROM inventory_categories WHERE name = ?').get(trimmed);
+    if (existing) return existing;
+    const maxOrder = db.prepare('SELECT MAX(sort_order) AS m FROM inventory_categories').get().m || 0;
+    const result = db.prepare('INSERT INTO inventory_categories (name, sort_order) VALUES (?, ?)').run(trimmed, maxOrder + 1);
+    backupDb();
+    return db.prepare('SELECT * FROM inventory_categories WHERE id = ?').get(result.lastInsertRowid);
+  });
+
   ipcMain.handle('inventory:getAll', () => {
-    return db.prepare('SELECT * FROM inventory ORDER BY name').all();
+    return db.prepare(
+      `SELECT i.*, ic.name AS category_name
+       FROM inventory i
+       LEFT JOIN inventory_categories ic ON ic.id = i.category_id
+       ORDER BY i.name`
+    ).all();
   });
 
-  ipcMain.handle('inventory:add', (_event, { name, unit, currentQty, reorderLevel, unitCost }) => {
+  ipcMain.handle('inventory:getHistory', (_event, inventoryId) => {
+    return db.prepare(
+      `SELECT t.*, i.name AS inventory_name
+       FROM inventory_transactions t
+       JOIN inventory i ON i.id = t.inventory_id
+       WHERE t.inventory_id = ?
+       ORDER BY t.id DESC`
+    ).all(inventoryId);
+  });
+
+  ipcMain.handle('inventory:adjust', (_event, { id, deltaQty, reason, note }) => {
+    const item = db.prepare('SELECT * FROM inventory WHERE id = ?').get(id);
+    if (!item) throw new Error('Inventory item not found');
+    const delta = Number(deltaQty || 0);
+    if (!Number.isFinite(delta)) throw new Error('Enter a valid stock adjustment.');
+
+    db.transaction(() => {
+      db.prepare('UPDATE inventory SET current_qty = current_qty + ? WHERE id = ?').run(delta, id);
+      addInventoryTransaction(id, delta, (reason || 'ADJUSTMENT').toUpperCase(), note || null, null);
+    })();
+
+    const saved = db.prepare('SELECT current_qty FROM inventory WHERE id = ?').get(id);
+    backupDb();
+    return { updated: true, currentQty: saved ? saved.current_qty : 0 };
+  });
+
+  ipcMain.handle('inventory:add', (_event, payload) => {
+    const normalized = normalizeInventoryInput(payload);
     const stmt = db.prepare(
-      'INSERT INTO inventory (name, unit, current_qty, reorder_level, unit_cost) VALUES (?, ?, ?, ?, ?)'
+      'INSERT INTO inventory (name, category_id, unit, current_qty, reorder_level, unit_cost, conversion_qty) VALUES (?, ?, ?, ?, ?, ?, ?)'
     );
-    const result = stmt.run(name, unit || '', currentQty || 0, reorderLevel || 0, unitCost || 0);
+    const result = stmt.run(
+      normalized.name,
+      normalized.categoryId,
+      normalized.unit || '',
+      normalized.currentQty,
+      normalized.reorderLevel,
+      normalized.unitCost,
+      normalized.conversionQty
+    );
     backupDb();
-    return { id: result.lastInsertRowid };
+    return { id: result.lastInsertRowid, ...normalized };
   });
 
-  ipcMain.handle('inventory:update', (_event, { id, name, unit, currentQty, reorderLevel, unitCost }) => {
+  ipcMain.handle('inventory:update', (_event, payload) => {
+    const normalized = normalizeInventoryInput(payload);
+    if (!payload || !payload.id) throw new Error('Inventory item id is required');
+
     db.prepare(
-      'UPDATE inventory SET name = ?, unit = ?, current_qty = ?, reorder_level = ?, unit_cost = ? WHERE id = ?'
-    ).run(name, unit || '', currentQty || 0, reorderLevel || 0, unitCost || 0, id);
+      'UPDATE inventory SET name = ?, category_id = ?, unit = ?, current_qty = ?, reorder_level = ?, unit_cost = ?, conversion_qty = ? WHERE id = ?'
+    ).run(
+      normalized.name,
+      normalized.categoryId,
+      normalized.unit || '',
+      normalized.currentQty,
+      normalized.reorderLevel,
+      normalized.unitCost,
+      normalized.conversionQty,
+      payload.id
+    );
+
+    const saved = db.prepare('SELECT * FROM inventory WHERE id = ?').get(payload.id);
     backupDb();
-    return { updated: true };
+    return { updated: true, item: saved };
   });
 
   ipcMain.handle('inventory:delete', (_event, id) => {
-    db.prepare('DELETE FROM inventory WHERE id = ?').run(id);
+    db.transaction(() => {
+      db.prepare('DELETE FROM recipes WHERE ingredient_id = ?').run(id);
+      db.prepare('DELETE FROM inventory_transactions WHERE inventory_id = ?').run(id);
+      db.prepare('DELETE FROM inventory WHERE id = ?').run(id);
+    })();
     backupDb();
     return { deleted: true };
   });

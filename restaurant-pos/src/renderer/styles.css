@@ -233,6 +233,20 @@ h1, h2, h3, .heading-font { font-family: 'Poppins', Arial, sans-serif; }
   padding-right: 22px;
 }
 
+.out-of-stock-badge {
+  display: inline-block;
+  width: fit-content;
+  margin-bottom: 6px;
+  background: #fdeceb;
+  color: #c0392b;
+  border: 1px solid #e7b6b0;
+  border-radius: 999px;
+  padding: 4px 8px;
+  font-size: 10px;
+  font-weight: 800;
+  letter-spacing: 0.6px;
+}
+
 .item-desc {
   color: #9a9488;
   font-size: 12px;
@@ -824,8 +838,9 @@ h1, h2, h3, .heading-font { font-family: 'Poppins', Arial, sans-serif; }
 
 .history-row {
   display: grid;
-  grid-template-columns: 90px 1fr 110px 90px 90px 140px;
+  grid-template-columns: minmax(120px, 1.6fr) minmax(90px, 1fr) minmax(150px, 1.5fr) minmax(220px, auto);
   align-items: center;
+  gap: 10px;
   padding: 12px 14px;
   border-radius: var(--tag);
   font-size: 14px;
@@ -849,8 +864,50 @@ h1, h2, h3, .heading-font { font-family: 'Poppins', Arial, sans-serif; }
 .history-row-item:hover { background: #f2ecdd; }
 .history-row-item.low-stock { background: #fdeceb; border-color: #e5b3ad; }
 .history-row-item.low-stock:hover { background: #fbe0dd; }
-.hc-total { color: var(--chili); font-weight: 700; }
-.hc-actions { text-align: right; display: flex; gap: 6px; justify-content: flex-end; }
+.hc-id,
+.hc-date,
+.hc-total,
+.hc-pay {
+  white-space: normal;
+  overflow: visible;
+  text-overflow: unset;
+}
+.hc-total {
+  color: var(--chili);
+  font-weight: 700;
+  line-height: 1.35;
+  word-break: break-word;
+}
+.hc-actions {
+  text-align: right;
+  display: flex;
+  gap: 6px;
+  justify-content: flex-end;
+  flex-wrap: wrap;
+  min-width: 210px;
+}
+
+@media (max-width: 980px) {
+  .history-row {
+    grid-template-columns: minmax(120px, 1.4fr) minmax(80px, 0.9fr) minmax(80px, 0.9fr) minmax(70px, 0.8fr) 1fr;
+  }
+}
+
+@media (max-width: 760px) {
+  .history-row {
+    grid-template-columns: 1fr 1fr;
+    row-gap: 8px;
+  }
+
+  .history-row-head {
+    display: none;
+  }
+
+  .hc-actions {
+    grid-column: 1 / -1;
+    justify-content: flex-start;
+  }
+}
 
 .status-badge {
   display: inline-block;

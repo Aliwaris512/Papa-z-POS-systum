@@ -64,12 +64,21 @@ function AddSectionModal({ onClose, onSave }) {
   );
 }
 
-function ItemCard({ item, onAdd, onDelete, onEditRecipe }) {
+function ItemCard({ item, inventory, recipeRows, onAdd, onDelete }) {
   const sizes = item.sizes ? JSON.parse(item.sizes) : null;
   const sizeKeys = sizes ? Object.keys(sizes) : [];
   const [selectedSize, setSelectedSize] = useState(sizeKeys[0] || null);
 
   const displayPrice = sizes ? sizes[selectedSize] : item.price;
+  const isOutOfStock = (() => {
+    if (!Array.isArray(inventory) || !inventory.length) return false;
+    const rows = Array.isArray(recipeRows) ? recipeRows : [];
+    if (!rows.length) return false;
+    return rows.some((row) => {
+      const ingredient = inventory.find((inv) => Number(inv.id) === Number(row.ingredient_id));
+      return ingredient && Number(ingredient.current_qty) < Number(row.qty_per_unit);
+    });
+  })();
 
   function handleAdd(e) {
     e.stopPropagation();
@@ -88,13 +97,8 @@ function ItemCard({ item, onAdd, onDelete, onEditRecipe }) {
       >
         &times;
       </button>
-      <button
-        className="recipe-item-btn"
-        onClick={(e) => { e.stopPropagation(); onEditRecipe(item); }}
-      >
-        Recipe
-      </button>
       <div className="item-name">{item.name}</div>
+      {isOutOfStock && <div className="out-of-stock-badge">OUT OF STOCK</div>}
       {item.description && <div className="item-desc">{item.description}</div>}
       {sizes && (
         <div className="size-options">
@@ -117,14 +121,21 @@ function ItemCard({ item, onAdd, onDelete, onEditRecipe }) {
   );
 }
 
-function ItemGrid({ items, onAdd, onDelete, onEditRecipe }) {
+function ItemGrid({ items, inventory, recipeByItem, onAdd, onDelete }) {
   if (!items.length) {
     return <div className="empty-state">No items in this category.</div>;
   }
   return (
     <div className="item-grid">
       {items.map((item) => (
-        <ItemCard key={item.id} item={item} onAdd={onAdd} onDelete={onDelete} onEditRecipe={onEditRecipe} />
+        <ItemCard
+          key={item.id}
+          item={item}
+          inventory={inventory}
+          recipeRows={recipeByItem[item.id] || []}
+          onAdd={onAdd}
+          onDelete={onDelete}
+        />
       ))}
     </div>
   );
@@ -485,7 +496,7 @@ function CheckoutView({ cart, onBack, onConfirm }) {
 
 const RESTAURANT_NAME = "Papa'Zzz Shawarma & Pizza";
 const LOGO_PATH = './assets/icon.png';
-const DEV_CONTACT = 'Developed by Ali Waris — 0309-4501187 — aliwarisdev.co.uk';
+const DEV_CONTACT = 'Developed by AMAFHH Solutions — 0309-4501187';
 
 function Header() {
   return (
@@ -880,19 +891,59 @@ function HistoryView({ orders, onSelectOrder, onExport, onDelete, onEdit, onBack
   );
 }
 
-function InventoryItemModal({ item, onClose, onSave }) {
+function getInventoryDefaults(name, categoryName) {
+  const text = `${name || ''} ${categoryName || ''}`.toLowerCase();
+  if (/burger(?!.*bun)|burger's|burgers/.test(text)) return { unit: 'Packet', conversionQty: 4 };
+  if (/burger.*bun|bun/.test(text)) return { unit: 'Packet', conversionQty: 4 };
+  if (/shawarma.*bread|bread/.test(text)) return { unit: 'Packet', conversionQty: 4 };
+  if (/tortilla|wrap/.test(text)) return { unit: 'Packet', conversionQty: 8 };
+  if (/water/.test(text)) return { unit: 'Bottle', conversionQty: 1 };
+  if (/drink|soft drink/.test(text)) return { unit: 'Bottle', conversionQty: 1 };
+  return { unit: 'Pcs', conversionQty: 1 };
+}
+
+function InventoryItemModal({ item, inventoryCategories, onClose, onSave }) {
   const [name, setName] = useState(item ? item.name : '');
+  const [categoryId, setCategoryId] = useState(item ? (item.category_id ?? '') : '');
+  const [customCategory, setCustomCategory] = useState('');
   const [unit, setUnit] = useState(item ? item.unit : '');
   const [currentQty, setCurrentQty] = useState(item ? String(item.current_qty) : '');
-  const [reorderLevel, setReorderLevel] = useState(item ? String(item.reorder_level) : '');
-  const [unitCost, setUnitCost] = useState(item ? String(item.unit_cost) : '');
+  const [unitCost, setUnitCost] = useState(item ? String(item.unit_cost || 0) : '');
+  const [conversionQty, setConversionQty] = useState(item ? String(item.conversion_qty || '') : '');
   const [error, setError] = useState('');
+
+  const selectedCategoryName = inventoryCategories.find((cat) => String(cat.id) === String(categoryId))?.name || customCategory.trim();
+  const burgerPacketOptions = [2, 4];
+  const isBurgerPacketItem = (selectedCategoryName || name || '').toLowerCase().includes('burger') || (/burger/.test((name || '').toLowerCase()) && (unit || '').toLowerCase() === 'packet');
+  const unitOptions = (() => {
+    const name = (selectedCategoryName || '').toLowerCase();
+    if (name.includes('water')) return ['300ml', '500ml', '1.5 Litre'];
+    if (name.includes('drink')) return ['300ml', '500ml', '1.5 Litre'];
+    if (name.includes('bread')) return ['Packet', 'Pcs'];
+    if (name.includes('burger')) return ['Packet', 'Pcs'];
+    if (name.includes('bun')) return ['Packet', 'Pcs'];
+    if (name.includes('wrap')) return ['Packet', 'Pcs'];
+    return ['Pcs', 'Bottle', 'Packet', 'Kg', 'G', 'Litre', 'Ml'];
+  })();
+
+  useEffect(() => {
+    if (!item && unitOptions.length && !unit) {
+      setUnit(unitOptions[0]);
+    }
+  }, [item, unitOptions, unit]);
+
+  useEffect(() => {
+    if (!item && unitOptions.length && !unitOptions.includes(unit)) {
+      setUnit(unitOptions[0]);
+    }
+  }, [item, unitOptions, unit]);
 
   function handleSave() {
     const trimmedName = name.trim();
     const qty = Number(currentQty);
-    const reorder = Number(reorderLevel);
-    const cost = Number(unitCost);
+    const cost = Number(unitCost || 0);
+    const conversion = conversionQty === '' ? null : Number(conversionQty);
+
     if (!trimmedName) {
       setError('Enter item name.');
       return;
@@ -901,70 +952,77 @@ function InventoryItemModal({ item, onClose, onSave }) {
       setError('Enter valid current quantity.');
       return;
     }
-    if (reorderLevel === '' || isNaN(reorder) || reorder < 0) {
-      setError('Enter valid reorder level.');
+    if (unit.trim() === '') {
+      setError('Enter a unit such as pcs, bottle, kg, g, litre, ml.');
       return;
     }
-    if (unitCost === '' || isNaN(cost) || cost < 0) {
-      setError('Enter valid unit cost.');
+    if (conversionQty !== '' && (isNaN(conversion) || conversion <= 0)) {
+      setError('Optional conversion quantity must be greater than zero.');
       return;
     }
+
     onSave({
       id: item ? item.id : undefined,
       name: trimmedName,
+      categoryId: categoryId ? Number(categoryId) : null,
+      categoryName: customCategory.trim() || null,
       unit: unit.trim(),
       currentQty: qty,
-      reorderLevel: reorder,
-      unitCost: cost
+      reorderLevel: 0,
+      unitCost: cost,
+      conversionQty: conversion
     });
   }
+
+  const showUnitDropdown = unitOptions.length > 0 && (selectedCategoryName || customCategory.trim());
 
   return (
     <div className="modal-overlay" onClick={onClose}>
       <div className="modal-card" onClick={(e) => e.stopPropagation()}>
-        <div className="modal-header">{item ? 'Edit Stock Item' : 'Add Stock Item'}</div>
+        <div className="modal-header">{item ? 'Edit Inventory Item' : 'Add Inventory Item'}</div>
         <div className="modal-body">
-          <label className="modal-label">Name</label>
-          <input
-            type="text"
-            className="modal-input"
-            value={name}
-            onChange={(e) => setName(e.target.value)}
-            placeholder="e.g. Chicken Breast"
-            autoFocus
-          />
+          <label className="modal-label">Item name</label>
+          <input type="text" className="modal-input" value={name} onChange={(e) => setName(e.target.value)} placeholder="Shawarma Bread" autoFocus />
+
+          <label className="modal-label">Category</label>
+          <select className="modal-input" value={categoryId} onChange={(e) => setCategoryId(e.target.value)}>
+            <option value="">Select category</option>
+            {inventoryCategories.map((cat) => (
+              <option key={cat.id} value={cat.id}>{cat.name}</option>
+            ))}
+          </select>
+
+          <label className="modal-label">Custom category (optional)</label>
+          <input type="text" className="modal-input" value={customCategory} onChange={(e) => setCustomCategory(e.target.value)} placeholder="e.g. Bakery" />
+
           <label className="modal-label">Unit</label>
-          <input
-            type="text"
-            className="modal-input"
-            value={unit}
-            onChange={(e) => setUnit(e.target.value)}
-            placeholder="e.g. kg, pcs, litre"
-          />
-          <label className="modal-label">Current Quantity</label>
-          <input
-            type="number"
-            className="modal-input"
-            value={currentQty}
-            onChange={(e) => setCurrentQty(e.target.value)}
-            placeholder="0"
-          />
-          <label className="modal-label">Reorder Level (min qty to keep in stock)</label>
-          <input
-            type="number"
-            className="modal-input"
-            value={reorderLevel}
-            onChange={(e) => setReorderLevel(e.target.value)}
-            placeholder="0"
-          />
-          <label className="modal-label">Unit Cost (Rs.)</label>
-          <input
-            type="number"
-            className="modal-input"
-            value={unitCost}
-            onChange={(e) => setUnitCost(e.target.value)}
-            placeholder="0"
-          />
+          {showUnitDropdown ? (
+            <select className="modal-input" value={unit} onChange={(e) => setUnit(e.target.value)}>
+              {unitOptions.map((opt) => (
+                <option key={opt} value={opt}>{opt}</option>
+              ))}
+            </select>
+          ) : (
+            <input type="text" className="modal-input" value={unit} onChange={(e) => setUnit(e.target.value)} placeholder="pcs, bottle, kg, g, litre, ml" />
+          )}
+
+          <label className="modal-label">Current stock</label>
+          <input type="number" className="modal-input" value={currentQty} onChange={(e) => setCurrentQty(e.target.value)} placeholder="0" step="any" />
+
+          <label className="modal-label">Pieces per purchase unit</label>
+          {isBurgerPacketItem && unit.toLowerCase() === 'packet' ? (
+            <select className="modal-input" value={conversionQty === '' || conversionQty == null ? '4' : String(conversionQty)} onChange={(e) => setConversionQty(e.target.value)}>
+              {burgerPacketOptions.map((opt) => (
+                <option key={opt} value={String(opt)}>{opt} pcs per packet</option>
+              ))}
+            </select>
+          ) : (
+            <input type="number" className="modal-input" value={conversionQty} onChange={(e) => setConversionQty(e.target.value)} placeholder="e.g. 4 for 1 packet = 4 pcs" step="any" />
+          )}
+
+          <label className="modal-label">Unit cost (optional)</label>
+          <input type="number" className="modal-input" value={unitCost} onChange={(e) => setUnitCost(e.target.value)} placeholder="0" step="any" />
+
           {error && <div className="modal-error">{error}</div>}
         </div>
         <div className="modal-actions">
@@ -980,9 +1038,26 @@ function RecipeModal({ item, inventory, recipe, onClose, onSave }) {
   const initialQtys = {};
   recipe.forEach((r) => { initialQtys[r.ingredient_id] = String(r.qty_per_unit); });
   const [qtys, setQtys] = useState(initialQtys);
+  const [selectedIngredient, setSelectedIngredient] = useState('');
+
+  const availableIngredients = inventory.filter((inv) => !(inv.id in qtys));
 
   function setQty(ingredientId, val) {
     setQtys((prev) => ({ ...prev, [ingredientId]: val }));
+  }
+
+  function removeIngredient(ingredientId) {
+    setQtys((prev) => {
+      const next = { ...prev };
+      delete next[ingredientId];
+      return next;
+    });
+  }
+
+  function handleAddIngredient() {
+    if (!selectedIngredient) return;
+    setQtys((prev) => ({ ...prev, [selectedIngredient]: '' }));
+    setSelectedIngredient('');
   }
 
   function handleSave() {
@@ -995,23 +1070,40 @@ function RecipeModal({ item, inventory, recipe, onClose, onSave }) {
   return (
     <div className="modal-overlay" onClick={onClose}>
       <div className="modal-card" onClick={(e) => e.stopPropagation()}>
-        <div className="modal-header">Recipe: {item.name}</div>
+        <div className="modal-header">Ingredients / Stock Used: {item.name}</div>
         <div className="modal-body">
           {inventory.length === 0 && <div className="empty-state">Add stock items in Inventory first.</div>}
-          {inventory.map((inv) => (
-            <div key={inv.id} className="recipe-row">
-              <span className="recipe-row-name">{inv.name} <span className="recipe-row-unit">({inv.unit})</span></span>
-              <input
-                type="number"
-                className="modal-input recipe-row-input"
-                value={qtys[inv.id] || ''}
-                onChange={(e) => setQty(inv.id, e.target.value)}
-                placeholder="0"
-                min="0"
-                step="any"
-              />
+          {Object.entries(qtys).map(([ingredientId, qty]) => {
+            const ingredient = inventory.find((inv) => String(inv.id) === String(ingredientId));
+            if (!ingredient) return null;
+            return (
+              <div key={ingredient.id} className="recipe-row">
+                <span className="recipe-row-name">{ingredient.name}</span>
+                <input
+                  type="number"
+                  className="modal-input recipe-row-input"
+                  value={qty}
+                  onChange={(e) => setQty(ingredient.id, e.target.value)}
+                  placeholder="0"
+                  min="0"
+                  step="any"
+                />
+                <span className="recipe-row-unit">{ingredient.unit}</span>
+                <button className="delete-order-btn" onClick={() => removeIngredient(ingredient.id)}>Remove</button>
+              </div>
+            );
+          })}
+          {availableIngredients.length > 0 && (
+            <div className="recipe-row recipe-row-add">
+              <select className="modal-input" value={selectedIngredient} onChange={(e) => setSelectedIngredient(e.target.value)}>
+                <option value="">+ Add Ingredient</option>
+                {availableIngredients.map((inv) => (
+                  <option key={inv.id} value={inv.id}>{inv.name}</option>
+                ))}
+              </select>
+              <button className="confirm-btn" onClick={handleAddIngredient} disabled={!selectedIngredient}>Add</button>
             </div>
-          ))}
+          )}
         </div>
         <div className="modal-actions">
           <button className="back-btn" onClick={onClose}>Cancel</button>
@@ -1022,11 +1114,83 @@ function RecipeModal({ item, inventory, recipe, onClose, onSave }) {
   );
 }
 
-function InventoryView({ items, onBack, onAdd, onEdit, onDelete, onExport, exportMsg }) {
-  const toBuy = items
-    .map((it) => ({ ...it, buyQty: Math.max(it.reorder_level - it.current_qty, 0) }))
-    .filter((it) => it.buyQty > 0);
-  const totalBuyCost = toBuy.reduce((sum, it) => sum + it.buyQty * it.unit_cost, 0);
+function InventoryAdjustmentModal({ item, onClose, onSave }) {
+  const [quantity, setQuantity] = useState('');
+  const [reason, setReason] = useState('New stock');
+  const [note, setNote] = useState('');
+  const [error, setError] = useState('');
+
+  function handleSave() {
+    const qty = Number(quantity);
+    if (quantity === '' || Number.isNaN(qty) || qty === 0) {
+      setError('Enter a non-zero adjustment quantity.');
+      return;
+    }
+    onSave({ id: item.id, quantity: qty, reason, note });
+  }
+
+  return (
+    <div className="modal-overlay" onClick={onClose}>
+      <div className="modal-card" onClick={(e) => e.stopPropagation()}>
+        <div className="modal-header">Adjust Stock: {item.name}</div>
+        <div className="modal-body">
+          <label className="modal-label">Current stock</label>
+          <div className="modal-input" style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between' }}>{item.current_qty} {item.unit}</div>
+
+          <label className="modal-label">Quantity</label>
+          <input type="number" className="modal-input" value={quantity} onChange={(e) => setQuantity(e.target.value)} placeholder="e.g. 20" step="any" />
+
+          <label className="modal-label">Reason</label>
+          <select className="modal-input" value={reason} onChange={(e) => setReason(e.target.value)}>
+            <option>New stock</option>
+            <option>Damaged</option>
+            <option>Waste</option>
+            <option>Stock count correction</option>
+          </select>
+
+          <label className="modal-label">Note (optional)</label>
+          <input type="text" className="modal-input" value={note} onChange={(e) => setNote(e.target.value)} placeholder="Optional note" />
+          {error && <div className="modal-error">{error}</div>}
+        </div>
+        <div className="modal-actions">
+          <button className="back-btn" onClick={onClose}>Cancel</button>
+          <button className="confirm-btn" onClick={handleSave}>Save</button>
+        </div>
+      </div>
+    </div>
+  );
+}
+
+function InventoryHistoryModal({ item, entries, onClose }) {
+  return (
+    <div className="modal-overlay" onClick={onClose}>
+      <div className="modal-card" onClick={(e) => e.stopPropagation()}>
+        <div className="modal-header">Stock History: {item.name}</div>
+        <div className="modal-body" style={{ maxHeight: '420px', overflowY: 'auto' }}>
+          {entries.length === 0 && <div className="empty-state">No stock movement yet.</div>}
+          {entries.map((entry) => (
+            <div key={entry.id} className="recipe-row" style={{ flexDirection: 'column', alignItems: 'flex-start' }}>
+              <strong>{entry.reason} {entry.delta_qty > 0 ? '+' : ''}{entry.delta_qty} {item.unit}</strong>
+              <div>{entry.note || 'No note'}</div>
+              <small>{new Date(entry.created_at).toLocaleString()}</small>
+            </div>
+          ))}
+        </div>
+        <div className="modal-actions">
+          <button className="confirm-btn" onClick={onClose}>Close</button>
+        </div>
+      </div>
+    </div>
+  );
+}
+
+function InventoryView({ items, categories, selectedCategoryId, onCategoryChange, onBack, onAdd, onEdit, onDelete, onAdjust, onHistory, onExport, exportMsg }) {
+  const filteredItems = selectedCategoryId
+    ? items.filter((it) => Number(it.category_id) === Number(selectedCategoryId))
+    : items;
+
+  const lowStockItems = filteredItems.filter((it) => Number(it.current_qty) <= Number(it.reorder_level));
+  const totalItems = filteredItems.length;
 
   return (
     <div className="history-screen">
@@ -1034,50 +1198,52 @@ function InventoryView({ items, onBack, onAdd, onEdit, onDelete, onExport, expor
         <div className="history-topbar">
           <div className="history-header">Inventory</div>
           <div className="history-topbar-actions">
-            <button className="export-btn" onClick={onAdd}>+ Add Stock Item</button>
-            <button className="export-btn" onClick={onExport}>Download CSV</button>
+            <button className="export-btn" onClick={onAdd}>+ Add Item</button>
+            <button className="export-btn" onClick={onExport}>Download List</button>
             <button className="back-btn" onClick={onBack}>Back to Menu</button>
           </div>
         </div>
 
-        {exportMsg && <div className="export-msg">{exportMsg}</div>}
+        <div className="export-msg">
+          {totalItems} Items | {lowStockItems.length} Low Stock
+        </div>
 
-        {toBuy.length > 0 && (
-          <div className="export-msg">
-            {toBuy.length} item{toBuy.length === 1 ? '' : 's'} need restock &middot; Est. cost Rs. {totalBuyCost.toFixed(2)}
+        {categories.length > 0 && (
+          <div className="history-list" style={{ marginBottom: '12px' }}>
+            <div className="cat-tab-row" style={{ display: 'flex', gap: '8px', flexWrap: 'wrap', padding: '8px 0' }}>
+              <button className={"cat-tab" + (!selectedCategoryId ? ' active' : '')} onClick={() => onCategoryChange(null)}>All</button>
+              {categories.map((cat) => (
+                <button key={cat.id} className={"cat-tab" + (selectedCategoryId === cat.id ? ' active' : '')} onClick={() => onCategoryChange(cat.id)}>{cat.name}</button>
+              ))}
+            </div>
           </div>
         )}
+
+        {exportMsg && <div className="export-msg">{exportMsg}</div>}
 
         <div className="history-list">
           <div className="history-row history-row-head">
             <span className="hc-id">Item</span>
-            <span className="hc-date">Current / Reorder</span>
-            <span className="hc-total">Buy Qty</span>
-            <span className="hc-pay">Buy Cost</span>
+            <span className="hc-date">Status</span>
+            <span className="hc-total">Stock</span>
             <span className="hc-actions"></span>
           </div>
-          {items.length === 0 && <div className="empty-state">No stock items yet. Add one above.</div>}
-          {items.map((it) => {
-            const buyQty = Math.max(it.reorder_level - it.current_qty, 0);
-            const buyCost = buyQty * it.unit_cost;
-            const low = buyQty > 0;
+          {filteredItems.length === 0 && <div className="empty-state">No items in this category yet.</div>}
+          {filteredItems.map((it) => {
+            const unitPieces = Number(it.conversion_qty || 0);
+            const piecesTotal = unitPieces > 1 ? Number(it.current_qty) * unitPieces : Number(it.current_qty);
+            const isLow = Number(it.current_qty) <= Number(it.reorder_level);
+            const stockText = unitPieces > 1 ? `${it.current_qty} ${it.unit} / ${piecesTotal} pcs` : `${it.current_qty} ${it.unit}`;
             return (
-              <div
-                key={it.id}
-                className={"history-row history-row-item" + (low ? " low-stock" : "")}
-                onClick={() => onEdit(it)}
-              >
+              <div key={it.id} className={"history-row history-row-item" + (isLow ? ' low-stock' : '')}>
                 <span className="hc-id">{it.name}</span>
-                <span className="hc-date">{it.current_qty} {it.unit} / {it.reorder_level} {it.unit}</span>
-                <span className="hc-total">{low ? `${buyQty} ${it.unit}` : '-'}</span>
-                <span className="hc-pay">{low ? `Rs. ${buyCost.toFixed(2)}` : '-'}</span>
+                <span className="hc-date">{isLow ? 'LOW STOCK' : 'OK'}</span>
+                <span className="hc-total">{stockText}</span>
                 <span className="hc-actions">
-                  <button
-                    className="delete-order-btn"
-                    onClick={(e) => { e.stopPropagation(); onDelete(it.id); }}
-                  >
-                    Delete
-                  </button>
+                  <button className="edit-order-btn" onClick={() => onEdit(it)}>Edit</button>
+                  <button className="edit-order-btn" onClick={() => onAdjust(it)}>Adjust</button>
+                  <button className="edit-order-btn" onClick={() => onHistory(it)}>History</button>
+                  <button className="delete-order-btn" onClick={() => onDelete(it.id)}>Delete</button>
                 </span>
               </div>
             );
@@ -1101,14 +1267,18 @@ function App() {
   const [showAddItem, setShowAddItem] = useState(false);
   const [showAddOn, setShowAddOn] = useState(false);
   const [inventory, setInventory] = useState([]);
+  const [recipeByItem, setRecipeByItem] = useState({});
+  const [inventoryCategories, setInventoryCategories] = useState([]);
+  const [selectedInventoryCategoryId, setSelectedInventoryCategoryId] = useState(null);
   const [showInventoryItem, setShowInventoryItem] = useState(false);
   const [editingInventoryItem, setEditingInventoryItem] = useState(null);
   const [inventoryExportMsg, setInventoryExportMsg] = useState('');
+  const [inventoryAdjustmentItem, setInventoryAdjustmentItem] = useState(null);
+  const [inventoryHistoryItem, setInventoryHistoryItem] = useState(null);
+  const [inventoryHistoryEntries, setInventoryHistoryEntries] = useState([]);
   const [pendingDelete, setPendingDelete] = useState(null);
   const [editingOrderRow, setEditingOrderRow] = useState(null);
   const [showAddSection, setShowAddSection] = useState(false);
-  const [recipeItem, setRecipeItem] = useState(null);
-  const [recipeRows, setRecipeRows] = useState([]);
   const [lowStockAlert, setLowStockAlert] = useState([]);
 
   function requestAdminDelete(message, action) {
@@ -1121,11 +1291,22 @@ function App() {
       if (cats.length) setSelectedId(cats[0].id);
     });
     window.api.getInventory().then(setInventory);
+    window.api.getInventoryCategories().then((cats) => {
+      setInventoryCategories(cats);
+      if (cats.length && !selectedInventoryCategoryId) setSelectedInventoryCategoryId(cats[0].id);
+    });
   }, []);
 
   useEffect(() => {
     if (selectedId == null) return;
-    window.api.getItemsByCategory(selectedId).then(setItems);
+    window.api.getItemsByCategory(selectedId).then(async (menuItems) => {
+      setItems(menuItems);
+      const itemRecipes = {};
+      for (const item of menuItems) {
+        itemRecipes[item.id] = await window.api.getRecipe(item.id);
+      }
+      setRecipeByItem(itemRecipes);
+    });
   }, [selectedId]);
 
   const selectedCategory = categories.find((c) => c.id === selectedId);
@@ -1178,9 +1359,12 @@ function App() {
       customerPhone,
       customerAddress
     });
+
+    const refreshedInventory = await window.api.getInventory();
+    setInventory(refreshedInventory);
+
     if (result.lowStock && result.lowStock.length) {
       setLowStockAlert(result.lowStock);
-      window.api.getInventory().then(setInventory);
     }
     setLastOrder({
       orderId: result.orderId,
@@ -1203,18 +1387,6 @@ function App() {
       await window.api.deleteItem(itemId);
       window.api.getItemsByCategory(selectedId).then(setItems);
     });
-  }
-
-  function openRecipeModal(item) {
-    window.api.getRecipe(item.id).then((rows) => {
-      setRecipeRows(rows);
-      setRecipeItem(item);
-    });
-  }
-
-  async function saveItemRecipe({ itemId, ingredients }) {
-    await window.api.saveRecipe({ itemId, ingredients });
-    setRecipeItem(null);
   }
 
   async function saveNewSection(name) {
@@ -1280,14 +1452,25 @@ function App() {
 
   async function saveEditedOrder(payload) {
     await window.api.updateOrder(payload);
-    const rows = await window.api.getOrders();
+    const [rows, refreshedInventory] = await Promise.all([
+      window.api.getOrders(),
+      window.api.getInventory()
+    ]);
     setOrders(rows);
+    setInventory(refreshedInventory);
     setEditingOrderRow(null);
   }
 
   async function openInventory() {
-    const rows = await window.api.getInventory();
+    const [rows, cats] = await Promise.all([
+      window.api.getInventory(),
+      window.api.getInventoryCategories()
+    ]);
     setInventory(rows);
+    setInventoryCategories(cats);
+    if (cats.length && !selectedInventoryCategoryId) {
+      setSelectedInventoryCategoryId(cats[0].id);
+    }
     setInventoryExportMsg('');
     setView('inventory');
   }
@@ -1309,19 +1492,56 @@ function App() {
   }
 
   async function saveInventoryItem(payload) {
-    if (payload.id) {
-      await window.api.updateInventoryItem(payload);
-    } else {
-      await window.api.addInventoryItem(payload);
+    let categoryId = payload.categoryId;
+    if (!categoryId && payload.categoryName) {
+      const created = await window.api.addInventoryCategory(payload.categoryName);
+      categoryId = created.id;
     }
-    const rows = await window.api.getInventory();
-    setInventory(rows);
+
+    const defaults = getInventoryDefaults(payload.name, payload.categoryName || inventoryCategories.find((cat) => String(cat.id) === String(categoryId))?.name || '');
+    const prepared = {
+      ...payload,
+      categoryId: categoryId || null,
+      name: payload.name.trim(),
+      unit: payload.unit || defaults.unit,
+      conversionQty: payload.conversionQty === '' || payload.conversionQty == null ? defaults.conversionQty : payload.conversionQty
+    };
+
+    if (prepared.id) {
+      await window.api.updateInventoryItem(prepared);
+    } else {
+      await window.api.addInventoryItem(prepared);
+    }
+
+    const rows = await Promise.all([
+      window.api.getInventory(),
+      window.api.getInventoryCategories()
+    ]);
+    setInventory(rows[0]);
+    setInventoryCategories(rows[1]);
     setShowInventoryItem(false);
     setEditingInventoryItem(null);
   }
 
+  function openInventoryAdjust(item) {
+    setInventoryAdjustmentItem(item);
+  }
+
+  async function saveInventoryAdjustment({ id, quantity, reason, note }) {
+    await window.api.adjustInventory({ id, deltaQty: quantity, reason, note });
+    const rows = await window.api.getInventory();
+    setInventory(rows);
+    setInventoryAdjustmentItem(null);
+  }
+
+  async function openInventoryHistory(item) {
+    const rows = await window.api.getInventoryHistory(item.id);
+    setInventoryHistoryEntries(rows);
+    setInventoryHistoryItem(item);
+  }
+
   function deleteInventoryItem(id) {
-    requestAdminDelete('Delete this stock item?', async () => {
+    requestAdminDelete('Delete this stock item? This will also remove its recipe links and stock history.', async () => {
       await window.api.deleteInventoryItem(id);
       const rows = await window.api.getInventory();
       setInventory(rows);
@@ -1370,16 +1590,22 @@ function App() {
       <>
         <InventoryView
           items={inventory}
+          categories={inventoryCategories}
+          selectedCategoryId={selectedInventoryCategoryId}
+          onCategoryChange={setSelectedInventoryCategoryId}
           onBack={() => setView('menu')}
           onAdd={openAddInventoryItem}
           onEdit={openEditInventoryItem}
           onDelete={deleteInventoryItem}
+          onAdjust={openInventoryAdjust}
+          onHistory={openInventoryHistory}
           onExport={exportInventoryCsv}
           exportMsg={inventoryExportMsg}
         />
         {showInventoryItem && (
           <InventoryItemModal
             item={editingInventoryItem}
+            inventoryCategories={inventoryCategories}
             onClose={() => { setShowInventoryItem(false); setEditingInventoryItem(null); }}
             onSave={saveInventoryItem}
           />
@@ -1399,7 +1625,7 @@ function App() {
               <button className="history-nav-btn" onClick={openHistory}>Order History</button>
             </div>
           </div>
-          <ItemGrid items={items} onAdd={addToCart} onDelete={deleteItem} onEditRecipe={openRecipeModal} />
+          <ItemGrid items={items} inventory={inventory} recipeByItem={recipeByItem} onAdd={addToCart} onDelete={deleteItem} />
         </div>
         <CartPanel
           cart={cart}
@@ -1455,13 +1681,18 @@ function App() {
           onSave={saveEditedOrder}
         />
       )}
-      {recipeItem && (
-        <RecipeModal
-          item={recipeItem}
-          inventory={inventory}
-          recipe={recipeRows}
-          onClose={() => setRecipeItem(null)}
-          onSave={saveItemRecipe}
+      {inventoryAdjustmentItem && (
+        <InventoryAdjustmentModal
+          item={inventoryAdjustmentItem}
+          onClose={() => setInventoryAdjustmentItem(null)}
+          onSave={saveInventoryAdjustment}
+        />
+      )}
+      {inventoryHistoryItem && (
+        <InventoryHistoryModal
+          item={inventoryHistoryItem}
+          entries={inventoryHistoryEntries}
+          onClose={() => { setInventoryHistoryItem(null); setInventoryHistoryEntries([]); }}
         />
       )}
       {lowStockAlert.length > 0 && (

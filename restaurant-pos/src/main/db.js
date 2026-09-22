@@ -3,6 +3,15 @@ const fs = require('fs');
 const Database = require('better-sqlite3');
 const { app } = require('electron');
 
+const DEFAULT_INVENTORY_CATEGORIES = [
+  'Bottled Water',
+  'Breads',
+  'Burger Bun',
+  'Drinks',
+  'Ingredients',
+  'Packaging'
+];
+
 function getDb() {
   const dbPath = path.join(app.getPath('userData'), 'pos.db');
   const db = new Database(dbPath);
@@ -33,15 +42,35 @@ function getDb() {
       order_type TEXT NOT NULL DEFAULT 'Dine-in',
       note TEXT,
       customer_phone TEXT,
-      customer_address TEXT
+      customer_address TEXT,
+      inventory_applied INTEGER NOT NULL DEFAULT 0,
+      inventory_restored INTEGER NOT NULL DEFAULT 0
+    );
+    CREATE TABLE IF NOT EXISTS inventory_categories (
+      id INTEGER PRIMARY KEY AUTOINCREMENT,
+      name TEXT NOT NULL UNIQUE,
+      sort_order INTEGER NOT NULL DEFAULT 0
     );
     CREATE TABLE IF NOT EXISTS inventory (
       id INTEGER PRIMARY KEY AUTOINCREMENT,
       name TEXT NOT NULL,
+      category_id INTEGER,
       unit TEXT NOT NULL DEFAULT '',
       current_qty REAL NOT NULL DEFAULT 0,
       reorder_level REAL NOT NULL DEFAULT 0,
-      unit_cost REAL NOT NULL DEFAULT 0
+      unit_cost REAL NOT NULL DEFAULT 0,
+      conversion_qty REAL DEFAULT NULL,
+      FOREIGN KEY (category_id) REFERENCES inventory_categories(id)
+    );
+    CREATE TABLE IF NOT EXISTS inventory_transactions (
+      id INTEGER PRIMARY KEY AUTOINCREMENT,
+      inventory_id INTEGER NOT NULL,
+      order_id INTEGER,
+      delta_qty REAL NOT NULL DEFAULT 0,
+      reason TEXT NOT NULL DEFAULT 'ADJUSTMENT',
+      note TEXT,
+      created_at TEXT NOT NULL DEFAULT CURRENT_TIMESTAMP,
+      FOREIGN KEY (inventory_id) REFERENCES inventory(id)
     );
     CREATE TABLE IF NOT EXISTS recipes (
       id INTEGER PRIMARY KEY AUTOINCREMENT,
@@ -66,7 +95,12 @@ function getDb() {
     'ALTER TABLE orders ADD COLUMN note TEXT',
     'ALTER TABLE orders ADD COLUMN customer_phone TEXT',
     'ALTER TABLE orders ADD COLUMN customer_address TEXT',
-    'ALTER TABLE orders ADD COLUMN inventory_applied INTEGER NOT NULL DEFAULT 0'
+    'ALTER TABLE orders ADD COLUMN inventory_applied INTEGER NOT NULL DEFAULT 0',
+    'ALTER TABLE orders ADD COLUMN inventory_restored INTEGER NOT NULL DEFAULT 0',
+    'ALTER TABLE inventory ADD COLUMN category_id INTEGER',
+    'ALTER TABLE inventory ADD COLUMN conversion_qty REAL',
+    'ALTER TABLE inventory_transactions ADD COLUMN order_id INTEGER',
+    'ALTER TABLE inventory_transactions ADD COLUMN note TEXT'
   ].forEach((sql) => {
     try {
       db.exec(sql);
@@ -76,9 +110,22 @@ function getDb() {
   });
 
   seedIfEmpty(db);
+  seedInventoryCategories(db);
   backfillSizes(db);
   ensureOffersCategory(db);
   return db;
+}
+
+function seedInventoryCategories(db) {
+  const existing = db.prepare('SELECT name FROM inventory_categories').all();
+  const names = new Set(existing.map((row) => row.name));
+  const insert = db.prepare('INSERT INTO inventory_categories (name, sort_order) VALUES (?, ?)');
+  const maxOrder = db.prepare('SELECT MAX(sort_order) AS m FROM inventory_categories').get().m || 0;
+
+  DEFAULT_INVENTORY_CATEGORIES.forEach((name, index) => {
+    if (names.has(name)) return;
+    insert.run(name, maxOrder + index + 1);
+  });
 }
 
 function ensureOffersCategory(db) {
